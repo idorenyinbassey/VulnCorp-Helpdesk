@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
         // No validation whatsoever. Upload a .php file and browse to it directly.
         $dest = $upload_dir . $orig_name;
         if (move_uploaded_file($tmp, $dest)) {
-            $msg = "Uploaded to /uploads/$orig_name";
+            $msg = "Uploaded to " . app_base() . "/uploads/$orig_name";
         } else { $err = 'Upload failed.'; }
 
     } elseif ($difficulty === 'intermediate') {
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
         if (in_array($file['type'], $allowed_mime, true)) {
             $dest = $upload_dir . $orig_name;
             if (move_uploaded_file($tmp, $dest)) {
-                $msg = "Uploaded to /uploads/$orig_name";
+                $msg = "Uploaded to " . app_base() . "/uploads/$orig_name";
             } else { $err = 'Upload failed.'; }
         } else {
             $err = 'File type not allowed (checked via Content-Type header).';
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
         if ($info !== false) {
             $dest = $upload_dir . $orig_name;
             if (move_uploaded_file($tmp, $dest)) {
-                $msg = "Uploaded to /uploads/$orig_name";
+                $msg = "Uploaded to " . app_base() . "/uploads/$orig_name";
             } else { $err = 'Upload failed.'; }
         } else {
             $err = 'File does not look like a valid image.';

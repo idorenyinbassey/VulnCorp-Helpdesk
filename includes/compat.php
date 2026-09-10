@@ -114,3 +114,32 @@ function stmt_fetch_one($stmt) {
     $rows = stmt_fetch_all($stmt);
     return isset($rows[0]) ? $rows[0] : null;
 }
+
+// app_base() - computes the app's URL mount point at runtime, so every
+// link/redirect/asset reference works whether this is deployed at the
+// web server's root, in a subfolder (e.g. /vulnapp/), or behind a
+// dedicated vhost - no Apache config required either way.
+//
+// The app has a fixed, known shape: files live either at the app root
+// (index.php, dashboard.php, logout.php) or exactly one level below it
+// in admin/, user/, support/, or challenges/. That fixed shape is what
+// lets this be computed reliably from SCRIPT_NAME alone.
+function app_base() {
+    static $base = null;
+    if ($base === null) {
+        $script_dir = isset($_SERVER['SCRIPT_NAME']) ? dirname($_SERVER['SCRIPT_NAME']) : '';
+        $script_dir = str_replace('\\', '/', $script_dir);
+        $known_subfolders = array('admin', 'user', 'support', 'challenges');
+        $last_segment = basename($script_dir);
+        if (in_array($last_segment, $known_subfolders, true)) {
+            $base = dirname($script_dir);
+        } else {
+            $base = $script_dir;
+        }
+        if ($base === '/' || $base === '.' || $base === '\\') {
+            $base = '';
+        }
+        $base = rtrim($base, '/');
+    }
+    return $base;
+}

@@ -16,13 +16,13 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_token']) && $diffic
         $_SESSION['username'] = $u['username'];
         $_SESSION['role'] = $u['role'];
         $_SESSION['full_name'] = $u['full_name'];
-        header('Location: /dashboard.php');
+        header('Location: ' . app_base() . '/dashboard.php');
         exit;
     }
 }
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: /dashboard.php');
+    header('Location: ' . app_base() . '/dashboard.php');
     exit;
 }
 
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_query($conn, "UPDATE users SET session_token = '$token' WHERE id = " . intval($user['id']));
             setcookie('remember_token', $token, time() + 86400 * 7, '/');
         }
-        header('Location: /dashboard.php');
+        header('Location: ' . app_base() . '/dashboard.php');
         exit;
     } else {
         $error = isset($error) && $error !== '' ? $error : 'Invalid username or password.';
@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <title>VulnCorp Helpdesk - Login</title>
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="<?php echo app_base(); ?>/assets/style.css">
 </head>
 <body>
 <div class="topbar">
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit">Login</button>
     </form>
     <p class="small">Difficulty tier is controlled by an admin from the admin panel.</p>
-    <p class="small"><a href="/user/forgot_password.php">Forgot password?</a></p>
+    <p class="small"><a href="<?php echo app_base(); ?>/user/forgot_password.php">Forgot password?</a></p>
 </div>
 </body>
 </html>

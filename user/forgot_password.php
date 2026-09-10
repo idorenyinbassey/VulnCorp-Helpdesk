@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
         // without needing a mail server in this lab.
         if ($difficulty !== 'expert') {
             $msg = "If that account exists, a reset link has been generated: "
-                 . "<a href=\"/user/reset_password.php?token=" . htmlspecialchars($token) . "\">reset link</a>"
+                 . "<a href=\"" . app_base() . "/user/reset_password.php?token=" . htmlspecialchars($token) . "\">reset link</a>"
                  . " <span class=\"small\">(shown here only because this lab has no mail server — in a real app this would be emailed, not displayed)</span>";
         } else {
             $msg = 'If that account exists, a reset link has been sent to the address on file.';
@@ -67,5 +67,5 @@ include dirname(__FILE__) . '/../includes/header.php';
     <input type="text" name="username" required>
     <button type="submit">Request reset link</button>
 </form>
-<p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. <a href="/index.php">Back to login</a></p>
+<p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. <a href="<?php echo app_base(); ?>/index.php">Back to login</a></p>
 <?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

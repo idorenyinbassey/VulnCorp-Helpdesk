@@ -163,7 +163,20 @@ format used in real CSRF bug reports (it only works against a
 target you're already authorized to test, and does nothing on its
 own without a logged-in victim visiting it).
 
-## 6. Client-side JavaScript
+## 6. Deployment path handling
+
+The app works whether it's deployed at the web server's root, in a
+subfolder (e.g. `/vulnapp/`, as in the steps above), or behind a
+dedicated vhost — no Apache config changes required either way. Every
+internal link, redirect, and asset reference is generated through a
+single `app_base()` function (`includes/compat.php`), which computes
+the app's mount point at runtime from `$_SERVER['SCRIPT_NAME']`. If
+you add new pages, use `app_base()` for any `href`, `src`, or
+`header('Location: ...')` that points back into the app — a hardcoded
+`href="/dashboard.php"`-style absolute path will break the moment
+someone deploys this one folder deeper or shallower than you did.
+
+## 7. Client-side JavaScript
 
 `assets/app.js` (loaded site-wide via `includes/footer.php`) adds pure
 UX polish: a live password-match/strength indicator on Change
@@ -180,7 +193,7 @@ bypassed with devtools or Burp Repeater anyway (the tools this app's
 own challenges tell students to use), so adding them there would
 only teach the wrong lesson — that a bug is fixed when it isn't.
 
-## 7. Suggested student flow
+## 8. Suggested student flow
 
 1. **Recon** — Nmap/Nikto the box, identify the app, map roles by
    registering... actually there's no self-registration (by design,
@@ -196,14 +209,14 @@ only teach the wrong lesson — that a bug is fixed when it isn't.
    (mass assignment, unanchored regex, attribute-injection XSS,
    session prediction + brute force) — good for a capstone/CTF.
 
-## 8. Resetting state
+## 9. Resetting state
 
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
 ```
 
-## 9. Notes
+## 10. Notes
 
 - All output that *is* meant to be safe uses `htmlspecialchars` /
   prepared statements — only the deliberately-vulnerable code paths

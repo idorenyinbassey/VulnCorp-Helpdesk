@@ -115,7 +115,7 @@ $challenges = array(
             'While logged in as <code>admin</code> in one tab, open your crafted page in another tab.',
             'Log out, then log in with the credentials you set — confirm you now have a second, fully independent admin account.',
         ),
-        'clue' => 'Same PoC shape as a CSRF form: <code>&lt;form action="/admin/create_user.php" method="POST"&gt;...fields...&lt;/form&gt;&lt;script&gt;document.forms[0].submit()&lt;/script&gt;</code>. This is the highest-impact bug in the whole simple tier — full persistent admin access, and the admin never clicked "create user."',
+        'clue' => 'Same PoC shape as a CSRF form: <code>&lt;form action="http://TARGET/admin/create_user.php" method="POST"&gt;...fields...&lt;/form&gt;&lt;script&gt;document.forms[0].submit()&lt;/script&gt;</code> (replace TARGET with the app\'s actual host/path — e.g. <code>192.168.1.3/vulnapp</code> if that\'s how it\'s deployed). This is the highest-impact bug in the whole simple tier — full persistent admin access, and the admin never clicked "create user."',
     ),
 ),
 

@@ -6,7 +6,7 @@ if (session_id() === '') {
 
 function require_login() {
     if (!isset($_SESSION['user_id'])) {
-        header('Location: /index.php');
+        header('Location: ' . app_base() . '/index.php');
         exit;
     }
 }
@@ -19,7 +19,7 @@ function require_role($roles) {
     if (!in_array($_SESSION['role'], (array)$roles)) {
         header('HTTP/1.1 403 Forbidden');
         echo "<h2>403 Forbidden</h2><p>Your role (" . htmlspecialchars($_SESSION['role']) . ") cannot access this page.</p>";
-        echo '<a href="/dashboard.php">Back to dashboard</a>';
+        echo '<a href="' . htmlspecialchars(app_base()) . '/dashboard.php">Back to dashboard</a>';
         exit;
     }
 }

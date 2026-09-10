@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <title>VulnCorp Helpdesk</title>
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="<?php echo app_base(); ?>/assets/style.css">
 </head>
 <body>
 <div class="topbar">
@@ -13,8 +13,8 @@
     <?php if (isset($_SESSION['user_id'])): ?>
     <div class="nav">
         <span>Hi, <?php echo htmlspecialchars($_SESSION['full_name']); ?> (<?php echo htmlspecialchars($_SESSION['role']); ?>)</span>
-        <a href="/dashboard.php">Dashboard</a>
-        <a href="/logout.php">Logout</a>
+        <a href="<?php echo app_base(); ?>/dashboard.php">Dashboard</a>
+        <a href="<?php echo app_base(); ?>/logout.php">Logout</a>
     </div>
     <?php endif; ?>
 </div>

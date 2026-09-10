@@ -83,5 +83,5 @@ include dirname(__FILE__) . '/../includes/header.php';
 </form>
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. Below expert tier this form has no CSRF
 protection — see the Challenges page for the "backdoor admin account" exercise.</p>
-<p><a href="/admin/index.php">&larr; Back to user list</a></p>
+<p><a href="<?php echo app_base(); ?>/admin/index.php">&larr; Back to user list</a></p>
 <?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

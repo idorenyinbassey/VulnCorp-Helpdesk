@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Reset Password</h2>
-<?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?> <a href="/index.php">Log in</a></div>
+<?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?> <a href="<?php echo app_base(); ?>/index.php">Log in</a></div>
 <?php else: ?>
 <?php if ($err): ?><div class="error"><?php echo htmlspecialchars($err); ?></div><?php endif; ?>
 <form method="POST" style="max-width:360px;">
@@ -48,5 +48,5 @@ include dirname(__FILE__) . '/../includes/header.php';
     <button type="submit">Reset Password</button>
 </form>
 <?php endif; ?>
-<p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. <a href="/user/forgot_password.php">Request a new link</a></p>
+<p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. <a href="<?php echo app_base(); ?>/user/forgot_password.php">Request a new link</a></p>
 <?php include dirname(__FILE__) . '/../includes/footer.php'; ?>
