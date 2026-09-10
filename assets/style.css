@@ -1,0 +1,20 @@
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; background:#f2f4f7; margin:0; color:#222; }
+.topbar { background:#1f2937; color:#fff; padding:12px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.brand { font-weight:bold; font-size:18px; }
+.tag { font-size:11px; background:#dc2626; padding:2px 6px; border-radius:3px; margin-left:6px; }
+.mode-badge { background:#374151; padding:4px 10px; border-radius:4px; font-size:13px; }
+.nav a { color:#93c5fd; margin-left:14px; text-decoration:none; }
+.nav span { margin-right:6px; }
+.container { max-width:900px; margin:30px auto; background:#fff; padding:25px 30px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+input, select, textarea { width:100%; padding:8px; margin:6px 0 14px; border:1px solid #ccc; border-radius:4px; }
+button, .btn { background:#2563eb; color:#fff; border:none; padding:9px 16px; border-radius:4px; cursor:pointer; text-decoration:none; display:inline-block; }
+button.danger, .btn.danger { background:#dc2626; }
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+th, td { text-align:left; padding:8px; border-bottom:1px solid #e5e7eb; font-size:14px; }
+.error { background:#fee2e2; color:#991b1b; padding:10px; border-radius:4px; margin-bottom:14px; }
+.notice { background:#fef9c3; color:#713f12; padding:10px; border-radius:4px; margin-bottom:14px; }
+.small { font-size:12px; color:#666; }
+.role-admin { color:#dc2626; font-weight:bold; }
+.role-support { color:#2563eb; font-weight:bold; }
+.role-user { color:#059669; font-weight:bold; }
