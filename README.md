@@ -33,9 +33,15 @@ creds `msfadmin`/`msfadmin`).
    (Metasploitable2's image predates the `service` wrapper — everything there is
    driven by raw `/etc/init.d/<name> {start|stop|restart|status}` scripts.)
 
-2. **Copy the project over** (from your trainer machine, same network as the VM)
+2. **Get the project onto your trainer machine, then copy it over**
    ```bash
-   scp -r vulnapp msfadmin@<metasploitable2-ip>:/tmp/
+   # If you haven't already, clone it locally first:
+   git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
+
+   # Modern OpenSSH's scp defaults to the SFTP protocol, which Metasploitable2's
+   # very old sshd doesn't handle cleanly (you'll see "realpath ... path
+   # canonicalization failed"). Force the legacy SCP protocol with -O:
+   scp -O -r VulnCorp-Helpdesk/vulnapp msfadmin@<metasploitable2-ip>:/tmp/
    ```
 
 3. **Install it under the webroot**
