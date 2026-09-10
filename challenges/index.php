@@ -430,12 +430,21 @@ $tier_labels = array(
     'expert' => 'Expert',
 );
 
+function challenge_slug($prefix, $title) {
+    return $prefix . '-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($title));
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 <h2>Challenges</h2>
 <p class="small">These map directly to the vulnerabilities live in this app right now. The app's current mode is
 <strong><?php echo htmlspecialchars($difficulty); ?></strong> — challenges for other tiers are shown for reference,
 but you'll need an admin to flip the mode (Admin Panel → Difficulty Settings) to actually attempt them.</p>
+
+<div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:10px 16px;margin-bottom:16px;">
+    <span id="challenge-progress-counter" class="small">0 solved</span>
+    <button type="button" id="challenge-progress-reset" class="btn" style="background:#6b7280;padding:5px 12px;font-size:12px;">Reset progress</button>
+</div>
 
 <div class="notice">
 <strong>Ground rules for this lab:</strong> only attack this app and hosts you're explicitly authorized to test.
@@ -445,10 +454,17 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
 
 <h3 style="margin-top:34px;">Phase 0 — Recon &amp; Discovery <span class="small">(do this first, any tier)</span></h3>
 <p class="small">Not gated by difficulty — run these against the lab before you start on any tier below. Several of the harder challenges are much easier if you've already mapped the app here.</p>
-<?php foreach ($recon as $c): ?>
-<div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fff;">
+<?php foreach ($recon as $c):
+    $cid = challenge_slug('recon', $c['title']);
+?>
+<div class="challenge-card" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fff;transition:opacity .2s;">
+    <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+        <input type="checkbox" class="challenge-progress-box" data-challenge-id="<?php echo htmlspecialchars($cid); ?>" style="width:auto;margin-top:4px;">
+        <span>
     <strong><?php echo htmlspecialchars($c['title']); ?></strong>
     <span class="small"> — <?php echo htmlspecialchars($c['module']); ?> · target: <code><?php echo $c['target']; ?></code></span>
+        </span>
+    </label>
     <p><?php echo $c['objective']; ?></p>
     <p class="small"><strong>Tools:</strong> <?php echo htmlspecialchars(implode(', ', $c['tools'])); ?></p>
     <ol>
@@ -470,10 +486,17 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
     <?php if ($is_current): ?><span class="small">(active now)</span><?php endif; ?>
 </h3>
 
-<?php foreach ($challenges[$tier] as $c): ?>
-<div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:<?php echo $is_current ? '#f8fafc' : '#fff'; ?>;">
+<?php foreach ($challenges[$tier] as $c):
+    $cid = challenge_slug($tier, $c['title']);
+?>
+<div class="challenge-card" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:<?php echo $is_current ? '#f8fafc' : '#fff'; ?>;transition:opacity .2s;">
+    <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+        <input type="checkbox" class="challenge-progress-box" data-challenge-id="<?php echo htmlspecialchars($cid); ?>" style="width:auto;margin-top:4px;">
+        <span>
     <strong><?php echo htmlspecialchars($c['title']); ?></strong>
     <span class="small"> — <?php echo htmlspecialchars($c['module']); ?> · target: <code><?php echo htmlspecialchars($c['target']); ?></code></span>
+        </span>
+    </label>
     <p><?php echo $c['objective']; // contains inline <code> markup by design ?></p>
     <p class="small"><strong>Tools:</strong> <?php echo htmlspecialchars(implode(', ', $c['tools'])); ?></p>
     <ol>

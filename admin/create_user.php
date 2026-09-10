@@ -68,7 +68,8 @@ include __DIR__ . '/../includes/header.php';
     <label>Full name</label>
     <input type="text" name="full_name">
     <label>Email</label>
-    <input type="text" name="email">
+    <input type="text" name="email" id="cu-email">
+    <div id="cu-email-hint" class="small" style="color:#d97706;margin-top:-10px;margin-bottom:10px;"></div>
     <label>Role</label>
     <select name="role">
         <option value="user">user</option>

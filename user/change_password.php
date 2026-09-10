@@ -90,9 +90,11 @@ include __DIR__ . '/../includes/header.php';
     <input type="password" name="current_password">
     <?php endif; ?>
     <label>New password</label>
-    <input type="password" name="new_password" required>
+    <input type="password" name="new_password" id="new_password" required>
+    <div id="pw-strength" class="small" style="margin-top:-10px;margin-bottom:10px;"></div>
     <label>Confirm new password</label>
-    <input type="password" name="confirm_password" required>
+    <input type="password" name="confirm_password" id="confirm_password" required>
+    <div id="pw-match-msg" class="small" style="margin-top:-10px;margin-bottom:10px;"></div>
     <?php if ($difficulty === 'expert'): ?>
     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
     <?php endif; ?>

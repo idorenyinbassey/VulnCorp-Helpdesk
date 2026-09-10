@@ -153,7 +153,24 @@ format used in real CSRF bug reports (it only works against a
 target you're already authorized to test, and does nothing on its
 own without a logged-in victim visiting it).
 
-## 6. Suggested student flow
+## 6. Client-side JavaScript
+
+`assets/app.js` (loaded site-wide via `includes/footer.php`) adds pure
+UX polish: a live password-match/strength indicator on Change
+Password, a local avatar image preview on Upload, a non-blocking
+email-format hint on Create User, and a local (localStorage-only)
+progress checklist on the Challenges page.
+
+It is **deliberately not wired up** to any exploit-relevant field —
+login, ticket subject/message/search, the diagnostics host/opts
+fields, and profile full_name/email have zero JS hooks and zero
+`<script>` tags. If you extend this app, keep new client-side
+validation off those fields: browser-side checks are trivially
+bypassed with devtools or Burp Repeater anyway (the tools this app's
+own challenges tell students to use), so adding them there would
+only teach the wrong lesson — that a bug is fixed when it isn't.
+
+## 7. Suggested student flow
 
 1. **Recon** — Nmap/Nikto the box, identify the app, map roles by
    registering... actually there's no self-registration (by design,
@@ -169,14 +186,14 @@ own without a logged-in victim visiting it).
    (mass assignment, unanchored regex, attribute-injection XSS,
    session prediction + brute force) — good for a capstone/CTF.
 
-## 7. Resetting state
+## 8. Resetting state
 
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
 ```
 
-## 8. Notes
+## 9. Notes
 
 - All output that *is* meant to be safe uses `htmlspecialchars` /
   prepared statements — only the deliberately-vulnerable code paths

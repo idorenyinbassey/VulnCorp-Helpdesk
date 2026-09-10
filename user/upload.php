@@ -74,7 +74,9 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($err): ?><div class="error"><?php echo htmlspecialchars($err); ?></div><?php endif; ?>
 <form method="POST" enctype="multipart/form-data">
     <label>Choose image</label>
-    <input type="file" name="avatar">
+    <input type="file" name="avatar" id="avatar-input">
+    <div id="avatar-filename" class="small"></div>
+    <img id="avatar-preview" style="display:none;max-width:160px;border-radius:6px;margin:8px 0;">
     <button type="submit">Upload</button>
 </form>
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?> — see README for what's validated at this tier.</p>
