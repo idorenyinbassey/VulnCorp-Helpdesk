@@ -24,12 +24,14 @@ creds `msfadmin`/`msfadmin`).
 1. **Confirm the stack is up on Metasploitable2**
    ```bash
    ssh msfadmin@<metasploitable2-ip>
-   sudo service apache2 status
-   sudo service mysql status
+   sudo /etc/init.d/apache2 status
+   sudo /etc/init.d/mysql status
    php -v          # ships PHP 5.2.x — this app avoids modern syntax on purpose
    php -m | grep mysqli   # confirm the mysqli extension is present
    ```
-   If Apache/MySQL aren't running: `sudo service apache2 start` / `sudo service mysql start`.
+   If Apache/MySQL aren't running: `sudo /etc/init.d/apache2 start` / `sudo /etc/init.d/mysql start`.
+   (Metasploitable2's image predates the `service` wrapper — everything there is
+   driven by raw `/etc/init.d/<name> {start|stop|restart|status}` scripts.)
 
 2. **Copy the project over** (from your trainer machine, same network as the VM)
    ```bash
@@ -71,7 +73,7 @@ creds `msfadmin`/`msfadmin`).
    </VirtualHost>
    ```
    Then: add `Listen 8080` to `/etc/apache2/ports.conf`,
-   `sudo a2ensite vulnapp`, `sudo service apache2 restart`.
+   `sudo a2ensite vulnapp`, `sudo /etc/init.d/apache2 restart`.
    (Port 80 is already used by Metasploitable2's own vulnerable apps —
    pick a free port like 8080 if you go this route.)
 
