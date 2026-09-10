@@ -1,8 +1,8 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/db.php';
+require_once dirname(__FILE__) . '/includes/auth.php';
+require_once dirname(__FILE__) . '/includes/db.php';
 require_login();
-include __DIR__ . '/includes/header.php';
+include dirname(__FILE__) . '/includes/header.php';
 ?>
 <h2>Dashboard</h2>
 <p>Welcome, <strong><?php echo htmlspecialchars($_SESSION['full_name']); ?></strong> —
@@ -24,4 +24,4 @@ role: <span class="role-<?php echo htmlspecialchars($_SESSION['role']); ?>"><?ph
 <li><a href="/admin/diagnostics.php">Network Diagnostics Tool</a></li>
 <?php endif; ?>
 </ul>
-<?php include __DIR__ . '/includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/includes/footer.php'; ?>

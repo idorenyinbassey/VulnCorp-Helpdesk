@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 
 // This "export" endpoint was added later and the developer forgot to apply

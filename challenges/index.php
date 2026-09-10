@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 $difficulty = get_difficulty($conn);
 
@@ -434,7 +434,7 @@ function challenge_slug($prefix, $title) {
     return $prefix . '-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($title));
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Challenges</h2>
 <p class="small">These map directly to the vulnerabilities live in this app right now. The app's current mode is
@@ -552,4 +552,4 @@ they're listed here because they're step one on a real target.</p>
 </table>
 <p class="small">Good practice: write a one-paragraph report for at least one challenge you solve in this lab, using this exact template, before you ever do it against a live program.</p>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

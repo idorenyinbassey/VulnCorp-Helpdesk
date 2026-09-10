@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/db.php';
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once dirname(__FILE__) . '/../includes/db.php';
+if (session_id() === '') { session_start(); }
 
 $difficulty = get_difficulty($conn);
 $msg = '';
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
     }
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Forgot Password</h2>
 <?php if ($msg): ?><div class="notice"><?php echo $msg; ?></div><?php endif; ?>
@@ -68,4 +68,4 @@ include __DIR__ . '/../includes/header.php';
     <button type="submit">Request reset link</button>
 </form>
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. <a href="/index.php">Back to login</a></p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

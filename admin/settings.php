@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_role('admin');
 
 $msg = '';
@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $current = get_difficulty($conn);
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Difficulty Settings</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -30,4 +30,4 @@ include __DIR__ . '/../includes/header.php';
     <button type="submit">Apply</button>
 </form>
 <p class="small">See README.md in the project root for what changes at each tier, per module.</p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

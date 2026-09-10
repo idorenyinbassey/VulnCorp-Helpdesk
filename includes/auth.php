@@ -1,6 +1,6 @@
 <?php
 // includes/auth.php
-if (session_status() === PHP_SESSION_NONE) {
+if (session_id() === '') {
     session_start();
 }
 
@@ -17,7 +17,7 @@ function require_login() {
 function require_role($roles) {
     require_login();
     if (!in_array($_SESSION['role'], (array)$roles)) {
-        http_response_code(403);
+        header('HTTP/1.1 403 Forbidden');
         echo "<h2>403 Forbidden</h2><p>Your role (" . htmlspecialchars($_SESSION['role']) . ") cannot access this page.</p>";
         echo '<a href="/dashboard.php">Back to dashboard</a>';
         exit;

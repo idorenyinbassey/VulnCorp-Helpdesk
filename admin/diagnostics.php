@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_role('admin');
 
 $difficulty = get_difficulty($conn);
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     log_activity($conn, $_SESSION['username'], "ran diagnostics on: $host");
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Network Diagnostics</h2>
 <p class="small">Ping a host from the server. (Mode: <?php echo htmlspecialchars($difficulty); ?>)</p>
@@ -65,4 +65,4 @@ include __DIR__ . '/../includes/header.php';
 <h3>Output</h3>
 <pre style="background:#111;color:#0f0;padding:14px;border-radius:4px;overflow:auto;"><?php echo htmlspecialchars($output); ?></pre>
 <?php endif; ?>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

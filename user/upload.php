@@ -1,12 +1,12 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 
 $difficulty = get_difficulty($conn);
 $msg = '';
 $err = '';
-$upload_dir = __DIR__ . '/../uploads/';
+$upload_dir = dirname(__FILE__) . '/../uploads/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
     $file = $_FILES['avatar'];
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
     if ($msg) { log_activity($conn, $_SESSION['username'], "uploaded avatar: $orig_name"); }
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Upload Avatar</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -80,4 +80,4 @@ include __DIR__ . '/../includes/header.php';
     <button type="submit">Upload</button>
 </form>
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?> — see README for what's validated at this tier.</p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

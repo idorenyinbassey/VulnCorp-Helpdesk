@@ -1,4 +1,4 @@
-<?php if (!isset($conn)) { require_once __DIR__ . '/db.php'; } ?>
+<?php if (!isset($conn)) { require_once dirname(__FILE__) . '/db.php'; } ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

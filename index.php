@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once dirname(__FILE__) . '/includes/db.php';
+if (session_id() === '') { session_start(); }
 
 $error = '';
 $difficulty = get_difficulty($conn);
@@ -62,20 +62,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE username = ? AND password = MD5(?)");
         mysqli_stmt_bind_param($stmt, 'ss', $username, $password);
         mysqli_stmt_execute($stmt);
-        $res = mysqli_stmt_get_result($stmt);
-        if ($res && mysqli_num_rows($res) > 0) {
-            $user = mysqli_fetch_assoc($res);
-        }
+        $user = stmt_fetch_one($stmt);
 
     } else { // expert
         // Fully parameterized, salted-ish hashing check, no info leakage.
         $stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE username = ? AND password = MD5(?)");
         mysqli_stmt_bind_param($stmt, 'ss', $username, $password);
         mysqli_stmt_execute($stmt);
-        $res = mysqli_stmt_get_result($stmt);
-        if ($res && mysqli_num_rows($res) > 0) {
-            $user = mysqli_fetch_assoc($res);
-        }
+        $user = stmt_fetch_one($stmt);
         // NOTE: expert tier intentionally has NO rate limiting / lockout anywhere in
         // this app, and session tokens below are predictable -> the intended attack
         // path here is online brute force + session token prediction, not SQLi.

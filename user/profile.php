@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 
 $difficulty = get_difficulty($conn);
@@ -26,10 +26,10 @@ if ($difficulty === 'simple' || $difficulty === 'intermediate') {
 }
 
 if (!$allowed_to_view) {
-    http_response_code(403);
-    include __DIR__ . '/../includes/header.php';
+    header('HTTP/1.1 403 Forbidden');
+    include dirname(__FILE__) . '/../includes/header.php';
     echo '<h2>403 Forbidden</h2><p>You can only view your own profile in this mode.</p>';
-    include __DIR__ . '/../includes/footer.php';
+    include dirname(__FILE__) . '/../includes/footer.php';
     exit;
 }
 
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $allowed_to_edit) {
 $res = mysqli_query($conn, "SELECT * FROM users WHERE id = " . (int)$view_id);
 $profile = $res ? mysqli_fetch_assoc($res) : null;
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Profile <?php echo $owns_profile ? '(you)' : '#' . (int)$view_id; ?></h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -90,4 +90,4 @@ include __DIR__ . '/../includes/header.php';
 </form>
 <p class="small">Try viewing other IDs by changing <code>?id=</code> in the URL.</p>
 <?php endif; ?>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

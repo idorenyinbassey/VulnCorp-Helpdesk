@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/render.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/render.php';
 require_login();
 
 $difficulty = get_difficulty($conn);
@@ -23,9 +23,9 @@ $search = isset($_GET['q']) ? $_GET['q'] : '';
 $stmt = mysqli_prepare($conn, "SELECT * FROM tickets WHERE user_id = ? ORDER BY id DESC");
 mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user_id']);
 mysqli_stmt_execute($stmt);
-$res = mysqli_stmt_get_result($stmt);
+$tickets = stmt_fetch_all($stmt);
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>My Tickets</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -53,7 +53,7 @@ include __DIR__ . '/../includes/header.php';
 <h3>Your tickets</h3>
 <table>
 <tr><th>ID</th><th>Subject</th><th>Message</th><th>Status</th><th>Created</th></tr>
-<?php while ($row = mysqli_fetch_assoc($res)):
+<?php foreach ($tickets as $row):
     if ($search !== '' && stripos($row['subject'], $search) === false) continue;
 ?>
 <tr>
@@ -63,6 +63,6 @@ include __DIR__ . '/../includes/header.php';
     <td><?php echo htmlspecialchars($row['status']); ?></td>
     <td><?php echo htmlspecialchars($row['created_at']); ?></td>
 </tr>
-<?php endwhile; ?>
+<?php endforeach; ?>
 </table>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

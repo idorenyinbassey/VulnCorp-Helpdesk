@@ -24,19 +24,25 @@ function render_ticket_text($text, $difficulty) {
 // Intended to allow only <b>, <i>, <a href="..."> — but the attribute
 // matching is sloppy and lets an attacker smuggle extra attributes
 // (e.g. onmouseover=) inside a tag that otherwise looks allowed.
+//
+// PHP 5.2 compatibility note: this used to be a closure passed to
+// preg_replace_callback(), but closures need PHP 5.3+. Metasploitable2
+// ships PHP 5.2, so it's a named callback instead.
+function _naive_allowlist_a_tag_callback($m) {
+    // BUG: this happily keeps any attributes the original tag had,
+    // including event handlers, as long as an href= substring is present.
+    if (stripos($m[1], 'href') !== false) {
+        return '<a ' . $m[1] . '>';
+    }
+    return '<a>';
+}
+
 function naive_allowlist_sanitize($html) {
     // Strip everything except a small tag allowlist...
     $allowed_tags = '<b><i><a>';
     $stripped = strip_tags($html, $allowed_tags);
     // ...then "restore" href attributes on <a> tags via regex, without
     // validating that nothing else is smuggled in alongside href.
-    $stripped = preg_replace_callback('/<a\s+(.*?)>/i', function($m) {
-        // BUG: this happily keeps any attributes the original tag had,
-        // including event handlers, as long as an href= substring is present.
-        if (stripos($m[1], 'href') !== false) {
-            return '<a ' . $m[1] . '>';
-        }
-        return '<a>';
-    }, $stripped);
+    $stripped = preg_replace_callback('/<a\s+(.*?)>/i', '_naive_allowlist_a_tag_callback', $stripped);
     return $stripped;
 }

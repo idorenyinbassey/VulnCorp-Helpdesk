@@ -1,11 +1,11 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_role('admin');
 
 $difficulty = get_difficulty($conn);
 $res = mysqli_query($conn, "SELECT id, username, role, full_name, email FROM users ORDER BY id");
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Admin Panel — Users</h2>
 <table>
@@ -28,4 +28,4 @@ include __DIR__ . '/../includes/header.php';
     <li><a href="/admin/diagnostics.php">Network Diagnostics (ping tool)</a> — command injection surface</li>
     <li><a href="/admin/settings.php">Difficulty tier</a> — currently <strong><?php echo htmlspecialchars($difficulty); ?></strong></li>
 </ul>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

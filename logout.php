@@ -1,5 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (session_id() === '') { session_start(); }
 setcookie('remember_token', '', time() - 3600, '/');
 session_unset();
 session_destroy();

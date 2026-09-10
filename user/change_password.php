@@ -1,13 +1,13 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 
 $difficulty = get_difficulty($conn);
 $msg = '';
 $err = '';
 
-if (session_status() !== PHP_SESSION_NONE && !isset($_SESSION['csrf_token'])) {
+if (session_id() !== '' && !isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 }
 
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($msg) { log_activity($conn, $_SESSION['username'], "changed password for user id=$target_id"); }
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Change Password<?php if ($target && (int)$target_id !== (int)$_SESSION['user_id']) echo ' — ' . htmlspecialchars($target['username']); ?></h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -102,4 +102,4 @@ include __DIR__ . '/../includes/header.php';
 </form>
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. Changing another account's password? Add
 <code>?id=&lt;user id&gt;</code> to the URL.</p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

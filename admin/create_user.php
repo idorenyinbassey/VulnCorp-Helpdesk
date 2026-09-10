@@ -1,13 +1,13 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
 require_role('admin');
 
 $difficulty = get_difficulty($conn);
 $msg = '';
 $err = '';
 
-if (session_status() !== PHP_SESSION_NONE && !isset($_SESSION['csrf_token'])) {
+if (session_id() !== '' && !isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 }
 
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Create User</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -84,4 +84,4 @@ include __DIR__ . '/../includes/header.php';
 <p class="small">Mode: <?php echo htmlspecialchars($difficulty); ?>. Below expert tier this form has no CSRF
 protection — see the Challenges page for the "backdoor admin account" exercise.</p>
 <p><a href="/admin/index.php">&larr; Back to user list</a></p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

@@ -1,14 +1,14 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/render.php';
+require_once dirname(__FILE__) . '/../includes/auth.php';
+require_once dirname(__FILE__) . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/render.php';
 require_role(array('support', 'admin'));
 
 $difficulty = get_difficulty($conn);
 $msg = '';
 
 // CSRF token only enforced at expert tier.
-if (session_status() !== PHP_SESSION_NONE && !isset($_SESSION['csrf_token'])) {
+if (session_id() !== '' && !isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 }
 
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket_id'], $_POST['
 }
 
 $res = mysqli_query($conn, "SELECT t.*, u.username FROM tickets t JOIN users u ON u.id = t.user_id ORDER BY t.id DESC");
-include __DIR__ . '/../includes/header.php';
+include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Support Queue</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -62,4 +62,4 @@ include __DIR__ . '/../includes/header.php';
 <?php endwhile; ?>
 </table>
 <p class="small">Below <strong>expert</strong> mode, this status-update form has no CSRF token — a crafted external page can auto-submit it.</p>
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include dirname(__FILE__) . '/../includes/footer.php'; ?>
