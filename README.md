@@ -35,19 +35,21 @@ creds `msfadmin`/`msfadmin`).
 
 2. **Get the project onto your trainer machine, then copy it over**
    ```bash
-   # If you haven't already, clone it locally first:
+   # If you haven't already, clone it locally first. Note the repo root
+   # itself IS the app (admin/, user/, index.php, etc. sit directly in
+   # the cloned folder — there is no nested "vulnapp" subfolder inside it).
    git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
 
    # Modern OpenSSH's scp defaults to the SFTP protocol, which Metasploitable2's
    # very old sshd doesn't handle cleanly (you'll see "realpath ... path
    # canonicalization failed"). Force the legacy SCP protocol with -O:
-   scp -O -r VulnCorp-Helpdesk/vulnapp msfadmin@<metasploitable2-ip>:/tmp/
+   scp -O -r VulnCorp-Helpdesk msfadmin@<metasploitable2-ip>:/tmp/
    ```
 
 3. **Install it under the webroot**
    ```bash
    ssh msfadmin@<metasploitable2-ip>
-   sudo mv /tmp/vulnapp /var/www/vulnapp
+   sudo mv /tmp/VulnCorp-Helpdesk /var/www/vulnapp
    sudo chown -R www-data:www-data /var/www/vulnapp
    sudo chmod -R 755 /var/www/vulnapp
    sudo chmod -R 777 /var/www/vulnapp/uploads   # deliberately world-writable for the upload module
