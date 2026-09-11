@@ -381,6 +381,88 @@ $recon = array(
 );
 
 // ---------------------------------------------------------------
+// Tools reference — organized by phase of a real engagement, in
+// progression order (passive before active, broad before targeted).
+// Every entry that can be, is tied to a specific VulnCorp challenge
+// above so the syntax isn't just abstract - you can run it against
+// this lab right now. Some phases (subdomain enum, Google dorking,
+// Shodan) don't really apply to a single-host internal lab like this
+// one; those are marked honestly rather than forced into a fake tie-in.
+// ---------------------------------------------------------------
+$tools_reference = array(
+    array(
+        'phase' => 'Step 1 — Subdomain Enumeration',
+        'intro' => 'Mostly a real-bounty-target concern (finding forgotten subdomains on a large scope). This lab is a single host with no subdomains, so treat this step as "know the syntax," not "expect results here."',
+        'tools' => array(
+            array('name' => 'crt.sh', 'type' => 'passive', 'kali' => 'Browser or curl — no install needed', 'does' => 'Searches certificate transparency logs for every subdomain that has ever had a cert issued', 'example' => 'curl -s "https://crt.sh/?q=%.example.com&output=json" | jq -r \'.[].name_value\' | sort -u', 'tie' => 'Not applicable to this lab (no public cert/DNS for a local VM). Use on real programs before anything else.'),
+            array('name' => 'subfinder', 'type' => 'passive', 'kali' => 'Preinstalled on Kali', 'does' => 'Aggregates subdomains from 20+ passive OSINT sources', 'example' => 'subfinder -d example.com -o subs.txt', 'tie' => 'Not applicable to this lab.'),
+            array('name' => 'amass (passive)', 'type' => 'passive', 'kali' => 'Preinstalled on Kali', 'does' => 'Same idea as subfinder, broader source list, slower', 'example' => 'amass enum -passive -d example.com -o subs.txt', 'tie' => 'Not applicable to this lab.'),
+            array('name' => 'theHarvester', 'type' => 'passive', 'kali' => 'Preinstalled on Kali', 'does' => 'Pulls subdomains, emails, and hosts from search engines/OSINT sources', 'example' => 'theHarvester -d example.com -b all', 'tie' => 'Not applicable to this lab — but this is the same tool from Week 5 OSINT in the training program.'),
+            array('name' => 'amass (active)', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Adds DNS brute force + zone transfer attempts on top of passive mode', 'example' => 'amass enum -active -d example.com -o subs.txt', 'tie' => 'Not applicable to this lab.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 2 — Live Host Probing',
+        'intro' => 'This is where this lab actually starts — confirming what\'s up and what it\'s running.',
+        'tools' => array(
+            array('name' => 'nmap -sn', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Ping sweep — which hosts on a range are actually up', 'example' => 'sudo nmap -sn 192.168.50.0/24', 'tie' => 'Same command style you already used to relocate Metasploitable2 after the network change.'),
+            array('name' => 'nmap -sV', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Full port + service/version scan', 'example' => 'nmap -sV -p- 192.168.50.20', 'tie' => 'Ties directly to the "Map the Attack Surface" and "Fingerprint the Stack" recon challenges above.'),
+            array('name' => 'httpx', 'type' => 'active', 'kali' => 'apt install httpx-toolkit (Kali repo) or go install', 'does' => 'Takes a host/URL list, checks which respond over HTTP(S), grabs status/title/tech in one pass', 'example' => 'echo "192.168.50.20/vulnapp/" | httpx -status-code -title -tech-detect', 'tie' => 'Faster alternative to manually curling each VulnCorp page during "Fingerprint the Stack."'),
+            array('name' => 'masscan', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Extremely fast port scan across large ranges — run before a slower nmap -sV, not instead of it', 'example' => 'sudo masscan -p1-65535 192.168.50.20 --rate=1000', 'tie' => 'Not needed for a single host, but this is the right tool if the lab ever grows to multiple VMs.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 3 — Content Discovery / Crawling',
+        'intro' => 'This is exactly how a real tester would find profile_export.php — not by being told, by brute-forcing.',
+        'tools' => array(
+            array('name' => 'Wayback / waybackurls', 'type' => 'passive', 'kali' => 'go install github.com/tomnomnom/waybackurls@latest', 'does' => 'Pulls historically archived URLs for a domain with zero live traffic to the target', 'example' => 'echo "example.com" | waybackurls', 'tie' => 'Not applicable — this lab has never been publicly crawled/archived.'),
+            array('name' => 'ffuf', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Fast wordlist-based directory/file brute force', 'example' => 'ffuf -u http://192.168.50.20/vulnapp/FUZZ.php -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc 200,301,302,403', 'tie' => 'This exact command is how you\'d discover "profile_export.php" for the Hard-tier "The Endpoint They Forgot" challenge, before ever reading the clue.'),
+            array('name' => 'gobuster dir', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Same idea as ffuf, different tool — good to know both since programs sometimes block one but not the other', 'example' => 'gobuster dir -u http://192.168.50.20/vulnapp/ -w /usr/share/wordlists/dirb/common.txt -x php', 'tie' => 'Same target as the ffuf example — try both and compare hit lists.'),
+            array('name' => 'dirb', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Older, slower directory brute-forcer — what the earlier README deploy discussion referenced', 'example' => 'dirb http://192.168.50.20/vulnapp/', 'tie' => 'Same target — this is the tool named in the "Recon Challenges" description above.'),
+            array('name' => 'Burp Suite Spider', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Crawls the app as you click through it, builds a site map from real browsing traffic', 'example' => '(GUI tool — set browser proxy to 127.0.0.1:8080, browse the app logged in as each role)', 'tie' => 'Ties to "Crawl the App Like a User Would" — the best way to find the role-gated pages ffuf alone would miss.'),
+            array('name' => 'hakrawler', 'type' => 'active', 'kali' => 'go install github.com/hakluke/hakrawler@latest', 'does' => 'Fast crawler that pulls endpoints out of HTML and linked JS files', 'example' => 'echo "http://192.168.50.20/vulnapp/" | hakrawler', 'tie' => 'Alternative to Burp Spider for the same recon challenge, scriptable/faster for repeat runs.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 4 — Parameter Discovery',
+        'intro' => 'The strongest tie-in on this whole page — this is the intended, non-source-reading way to find the expert-tier mass-assignment bug.',
+        'tools' => array(
+            array('name' => 'ParamSpider', 'type' => 'passive', 'kali' => 'git clone from GitHub, not preinstalled', 'does' => 'Mines likely parameter names out of Wayback-archived URLs for a domain', 'example' => 'python3 paramspider.py -d example.com', 'tie' => 'Not applicable — no archive history for this lab.'),
+            array('name' => 'Arjun', 'type' => 'active', 'kali' => 'pip install arjun, or apt install arjun on recent Kali', 'does' => 'Actively brute-forces hidden GET/POST parameter names against a live endpoint', 'example' => 'arjun -u http://192.168.50.20/vulnapp/user/profile.php -m POST', 'tie' => 'This is the real way to discover the hidden "role" parameter for the Expert-tier "Privilege Escalation via Mass Assignment" challenge — the visible form never shows it to a non-admin, but Arjun brute-forcing common parameter names will surface it without reading includes/render.php or the clue.'),
+            array('name' => 'x8', 'type' => 'active', 'kali' => 'cargo install x8, or download release binary — not preinstalled', 'does' => 'Same purpose as Arjun, Rust-based, generally faster on large wordlists', 'example' => 'x8 -u http://192.168.50.20/vulnapp/user/profile.php -X POST -w params.txt', 'tie' => 'Same target/goal as the Arjun example — good to compare speed/results between the two.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 5 — Vulnerability Scanning',
+        'intro' => 'Automated scanners are a starting point on this lab, not the main event — see the "Quick Misconfig Sweep" challenge\'s own note about this.',
+        'tools' => array(
+            array('name' => 'Nikto', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'General web server misconfig / outdated-software scanner', 'example' => 'nikto -h http://192.168.50.20/vulnapp/', 'tie' => 'Same tool and target as the "Quick Misconfig Sweep" recon challenge above.'),
+            array('name' => 'sqlmap', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Automated SQL injection detection and exploitation', 'example' => 'sqlmap -r login.req -p username --dump   # capture the login POST in Burp first, save as login.req', 'tie' => 'Directly named in the "Dump the Users Table" Simple-tier challenge — this is the intended tool for that one.'),
+            array('name' => 'Nuclei', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Template-based scanner covering thousands of known CVEs/misconfigs', 'example' => 'nuclei -u http://192.168.50.20/vulnapp/ -t exposures/', 'tie' => 'Limited value on VulnCorp itself since it\'s custom code, not a known product — but run it against Metasploitable2\'s other services (port 8180 Tomcat, port 21 vsftpd) for a good demonstration of what it\'s actually for.'),
+            array('name' => 'OWASP ZAP (automated scan)', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Active spider + automated vulnerability scan combined, GUI or CLI', 'example' => 'zap-cli quick-scan --self-contained http://192.168.50.20/vulnapp/', 'tie' => 'Good comparison run against the same target as the sqlmap/Nikto examples — see what it catches vs. misses on the app-logic bugs (IDOR, mass assignment) that need a human.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 6 — Manual Recon',
+        'intro' => 'No tool replaces actually reading the app.',
+        'tools' => array(
+            array('name' => 'Google dorking', 'type' => 'passive', 'kali' => 'Browser — no install', 'does' => '`site:`, `filetype:`, `inurl:` searches for exposed files/panels on public targets', 'example' => 'site:example.com filetype:env', 'tie' => 'Not applicable — this lab isn\'t publicly indexed.'),
+            array('name' => 'Shodan / Censys', 'type' => 'passive', 'kali' => 'Browser or API — no install', 'does' => 'Search pre-indexed internet-wide scan data without ever touching the target directly', 'example' => 'shodan search "apache 2.2.8"', 'tie' => 'Not applicable to an internal lab VM — this is purely a real-target tool.'),
+            array('name' => 'Manual browsing + view-source', 'type' => 'active (low-volume)', 'kali' => 'Browser + Burp proxy', 'does' => 'Clicking through the app as each role, reading rendered HTML, forming hypotheses before testing them', 'example' => '(no command — log in as admin/sam/alice/bob in turn, compare what each role can see)', 'tie' => 'This is literally the "Crawl the App Like a User Would" recon challenge.'),
+        ),
+    ),
+    array(
+        'phase' => 'Step 7 — Proxy / Interactive Testing',
+        'intro' => 'The main workhorse for everything past recon — almost every challenge on this page assumes one of these is running.',
+        'tools' => array(
+            array('name' => 'Burp Suite', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Intercept, Repeater, and manual tampering with every request', 'example' => 'Proxy tab -> set browser to 127.0.0.1:8080 -> Intercept on -> submit the login form -> send to Repeater -> edit username to admin\' -- -', 'tie' => 'Used across nearly every challenge on this page, from the Simple-tier auth bypass through the Expert-tier CSRF confirmation.'),
+            array('name' => 'OWASP ZAP (manual/proxy mode)', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Free/open-source alternative to Burp, same core intercept-and-tamper workflow', 'example' => 'Tools -> Options -> Local Proxy -> set browser to 127.0.0.1:8081', 'tie' => 'Drop-in alternative to Burp for any challenge above if you want to compare workflows.'),
+            array('name' => 'mitmproxy', 'type' => 'active', 'kali' => 'Preinstalled on Kali', 'does' => 'Terminal-based intercepting proxy, scriptable in Python', 'example' => 'mitmproxy --listen-port 8082', 'tie' => 'Good option for scripting the CSRF PoC auto-submit tests (Support Queue / Create User challenges) instead of a static HTML file.'),
+        ),
+    ),
+);
+
+// ---------------------------------------------------------------
 // Reference methodology — general bug bounty workflow, not tied to
 // this lab's difficulty tiers. Useful as a checklist for real
 // (authorized) engagements once these fundamentals feel comfortable.
@@ -477,6 +559,29 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
 </div>
 <?php endforeach; ?>
 
+<h3 style="margin-top:34px;">Tools Reference — by Phase (Passive → Active)</h3>
+<p class="small"><span style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:3px;font-size:12px;">🟢 Passive</span> = no direct traffic to the target, safe and undetectable, uses third-party sources.
+<span style="background:#ffedd5;color:#9a3412;padding:1px 7px;border-radius:3px;font-size:12px;margin-left:6px;">🟠 Active</span> = touches the target directly — can be logged, rate-limited, or blocked.
+Within each phase, exhaust passive options first; only escalate to active tools once passive recon is genuinely exhausted — and active recon (phases 1–2) should always come before active exploitation (phases 4–7).</p>
+
+<?php foreach ($tools_reference as $block): ?>
+<h4 style="margin-top:24px;"><?php echo htmlspecialchars($block['phase']); ?></h4>
+<p class="small"><?php echo htmlspecialchars($block['intro']); ?></p>
+<?php foreach ($block['tools'] as $t):
+    $is_active = (strpos($t['type'], 'active') === 0);
+    $badge = $is_active
+        ? '<span style="background:#ffedd5;color:#9a3412;padding:1px 7px;border-radius:3px;font-size:11px;">🟠 ' . htmlspecialchars($t['type']) . '</span>'
+        : '<span style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:3px;font-size:11px;">🟢 passive</span>';
+?>
+<div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;margin-bottom:10px;background:#fff;">
+    <strong><?php echo htmlspecialchars($t['name']); ?></strong> <?php echo $badge; ?>
+    <span class="small"> — <?php echo htmlspecialchars($t['kali']); ?></span>
+    <p class="small" style="margin:6px 0;"><?php echo htmlspecialchars($t['does']); ?></p>
+    <pre style="background:#111;color:#0f0;padding:8px 12px;border-radius:4px;overflow:auto;font-size:12.5px;margin:6px 0;"><?php echo htmlspecialchars($t['example']); ?></pre>
+    <p class="small" style="margin:6px 0 0;"><strong>On this lab:</strong> <?php echo htmlspecialchars($t['tie']); ?></p>
+</div>
+<?php endforeach; ?>
+<?php endforeach; ?>
 
 <?php foreach ($tier_order as $tier):
     $is_current = ($tier === $difficulty);
