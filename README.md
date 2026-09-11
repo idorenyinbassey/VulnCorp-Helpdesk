@@ -158,6 +158,25 @@ challenges has one; the recon and tools-reference sections don't,
 since those are about methodology/tool usage rather than a specific
 vulnerability mechanism.
 
+**Difficulty badges and staged hints.** Each of the 26 tiered
+challenges is also rated **Entry / Standard / Stretch** (a genuine
+audit of relative cognitive load within its tier, not just its
+position in the array) and displayed sorted by that rating — Entry
+challenges first, Stretch last — so a student working through, say,
+the Simple tier meets the four easiest challenges before the ones that
+need more synthesis (UNION SQLi, the CSRF backdoor). Hints are
+two-stage: a **Nudge** (a conceptual pointer, no payload) reveals
+first, and a separate **Full answer** underneath it holds what used to
+be the single "Reveal clue." This was originally planned as three
+stages (nudge → stronger nudge → full answer); it shipped as two to
+keep the addition scoped — the existing, already-verified clue text
+became the answer tier unchanged, so nothing that was previously
+tested got rewritten in the process.
+
+The recon and tools-reference sections keep the older single-clue
+format, since they're methodology content rather than a specific
+vulnerability to nudge toward.
+
 A short version of what's covered (full detail is on the page itself):
 
 - **Simple** — auth bypass, UNION-based dumping with sqlmap, stored XSS, basic IDOR, raw command injection, unrestricted upload.
