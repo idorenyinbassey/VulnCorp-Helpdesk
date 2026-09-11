@@ -17,6 +17,7 @@ role: <span class="role-<?php echo htmlspecialchars($_SESSION['role']); ?>"><?ph
 <li><a href="<?php echo app_base(); ?>/api/tickets.php">🔌 Tickets API (JSON)</a></li>
 <li><a href="<?php echo app_base(); ?>/challenges/index.php">🏁 Challenges</a></li>
 <li><a href="<?php echo app_base(); ?>/toolkit/index.php">🧰 Toolkit — Checklists &amp; Kits</a></li>
+<li><a href="<?php echo app_base(); ?>/feedback/survey.php">📝 Give Module Feedback</a></li>
 <?php if ($_SESSION['role'] === 'support' || $_SESSION['role'] === 'admin'): ?>
 <li><a href="<?php echo app_base(); ?>/support/tickets.php">Support Queue (all tickets)</a></li>
 <?php endif; ?>
@@ -25,6 +26,7 @@ role: <span class="role-<?php echo htmlspecialchars($_SESSION['role']); ?>"><?ph
 <li><a href="<?php echo app_base(); ?>/admin/create_user.php">Create User</a></li>
 <li><a href="<?php echo app_base(); ?>/admin/settings.php">Difficulty Settings</a></li>
 <li><a href="<?php echo app_base(); ?>/admin/diagnostics.php">Network Diagnostics Tool</a></li>
+<li><a href="<?php echo app_base(); ?>/admin/feedback.php">📊 Student Feedback Results</a></li>
 <?php endif; ?>
 </ul>
 <?php include dirname(__FILE__) . '/includes/footer.php'; ?>

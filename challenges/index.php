@@ -4,6 +4,37 @@ require_once dirname(__FILE__) . '/../includes/db.php';
 require_login();
 $difficulty = get_difficulty($conn);
 
+// This user's existing quick-votes, keyed by challenge_id, so already-voted
+// challenges show their current choice instead of a blank widget.
+$my_votes = array();
+$stmt = mysqli_prepare($conn, "SELECT challenge_id, rating FROM challenge_feedback WHERE username = ?");
+mysqli_stmt_bind_param($stmt, 's', $_SESSION['username']);
+mysqli_stmt_execute($stmt);
+foreach (stmt_fetch_all($stmt) as $v) {
+    $my_votes[$v['challenge_id']] = $v['rating'];
+}
+
+function render_feedback_widget($cid, $my_votes) {
+    $options = array(
+        'too_easy' => 'Too easy',
+        'just_right' => 'Just right',
+        'too_hard' => 'Too hard',
+        'stuck' => 'I got stuck',
+    );
+    $current = isset($my_votes[$cid]) ? $my_votes[$cid] : null;
+    echo '<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;">';
+    echo 'How was this one? ';
+    foreach ($options as $val => $label) {
+        $is_current = ($current === $val);
+        echo '<form method="POST" action="' . htmlspecialchars(app_base()) . '/feedback/vote.php" style="display:inline;">';
+        echo '<input type="hidden" name="challenge_id" value="' . htmlspecialchars($cid) . '">';
+        echo '<input type="hidden" name="return_to" value="' . htmlspecialchars($_SERVER['REQUEST_URI']) . '">';
+        echo '<button type="submit" name="rating" value="' . $val . '" class="btn" style="padding:3px 9px;font-size:11px;margin:2px 3px 2px 0;' . ($is_current ? 'background:#1e40af;' : 'background:#9ca3af;') . '">' . ($is_current ? '✓ ' : '') . $label . '</button>';
+        echo '</form>';
+    }
+    echo '</div>';
+}
+
 // ---------------------------------------------------------------
 // Challenge definitions. Each entry maps to a real vuln in this app.
 // "tools" lists the legitimate pentest tooling suited to the task.
@@ -816,7 +847,7 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
 <?php foreach ($recon as $c):
     $cid = challenge_slug('recon', $c['title']);
 ?>
-<div class="challenge-card" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fff;transition:opacity .2s;">
+<div class="challenge-card" id="feedback-<?php echo htmlspecialchars($cid); ?>" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fff;transition:opacity .2s;">
     <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
         <input type="checkbox" class="challenge-progress-box" data-challenge-id="<?php echo htmlspecialchars($cid); ?>" style="width:auto;margin-top:4px;">
         <span>
@@ -833,6 +864,7 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
         <summary>Reveal clue</summary>
         <p><?php echo $c['clue']; ?></p>
     </details>
+    <?php render_feedback_widget($cid, $my_votes); ?>
 </div>
 <?php endforeach; ?>
 
@@ -878,7 +910,7 @@ foreach ($sorted_list as $c):
     );
     $dc = isset($c['difficulty'], $diff_colors[$c['difficulty']]) ? $diff_colors[$c['difficulty']] : array('bg' => '#e5e7eb', 'fg' => '#374151');
 ?>
-<div class="challenge-card" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:<?php echo $is_current ? '#f8fafc' : '#fff'; ?>;transition:opacity .2s;">
+<div class="challenge-card" id="feedback-<?php echo htmlspecialchars($cid); ?>" style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:<?php echo $is_current ? '#f8fafc' : '#fff'; ?>;transition:opacity .2s;">
     <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
         <input type="checkbox" class="challenge-progress-box" data-challenge-id="<?php echo htmlspecialchars($cid); ?>" style="width:auto;margin-top:4px;">
         <span>
@@ -915,6 +947,7 @@ foreach ($sorted_list as $c):
         <p><?php echo $c['clue']; // inline <code> markup by design ?></p>
     </details>
     <?php endif; ?>
+    <?php render_feedback_widget($cid, $my_votes); ?>
 </div>
 <?php endforeach; ?>
 <?php endforeach; ?>

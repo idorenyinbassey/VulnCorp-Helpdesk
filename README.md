@@ -272,7 +272,35 @@ content, regenerate all five formats together (`build_docx.js` /
 `build_xlsx.py` if you kept them, or by hand) so they don't drift out
 of sync with each other.
 
-## 9. Suggested student flow
+## 9. Beginner-feedback tools
+
+Real feedback capture, not part of the training lab itself — built
+correctly, with no intentional vulnerabilities.
+
+- **Quick per-challenge votes.** Every challenge card on the Challenges
+  page (including recon) has a one-click "How was this one?" widget —
+  Too easy / Just right / Too hard / I got stuck. One vote per student
+  per challenge; clicking again changes your existing vote rather than
+  adding a duplicate. Votes are tied to the logged-in username.
+- **End-of-tier survey** at `/feedback/survey.php` (linked from the
+  dashboard) — four 1-5 ratings (difficulty, concept-block clarity,
+  hint usefulness, confidence) plus two optional free-text questions,
+  one submission per student per tier (re-submitting updates it).
+- **Admin results dashboard** at `/admin/feedback.php` — the payoff.
+  Per-challenge votes are sorted **worst-first** (most "too hard" +
+  "stuck" votes at the top, highlighted red if they outnumber "just
+  right") so problem spots surface automatically instead of requiring
+  you to read every row. Survey responses are averaged per tier, and
+  every free-text comment is listed with its rater's difficulty/
+  confidence scores for context.
+
+This is genuinely how the difficulty ratings, hints, and concept
+blocks in this app should keep improving — they were calibrated by
+one person reasoning about what a beginner needs, not by actual
+beginner data. Point a real cohort at this before trusting the
+calibration further.
+
+## 10. Suggested student flow
 
 1. **Recon** — Nmap/Nikto the box, identify the app, map roles by
    registering... actually there's no self-registration (by design,
@@ -287,8 +315,11 @@ of sync with each other.
 5. **Expert** — mostly closed; the remaining bugs require chaining
    (mass assignment, unanchored regex, attribute-injection XSS,
    session prediction + brute force) — good for a capstone/CTF.
+6. **After each tier** — have students fill out the tier survey
+   (`/feedback/survey.php`) before moving on, so you have a record of
+   how that specific cohort experienced it.
 
-## 10. Resetting state
+## 11. Resetting state
 
 Easiest: `cd` into your copy of the repo on Metasploitable2 and re-run
 the setup script — `sudo bash setup.sh --yes` reinstalls the current
@@ -301,7 +332,7 @@ mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
 ```
 
-## 11. Notes
+## 12. Notes
 
 - All output that *is* meant to be safe uses `htmlspecialchars` /
   prepared statements — only the deliberately-vulnerable code paths
@@ -328,18 +359,22 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
   simple / 50ms intermediate) were tuned empirically against that real
   setup, not guessed.
 
-## 12. Building on this later
+## 13. Building on this later
 
-- `api/` follows the same one-level-deep folder convention as `admin/`,
-  `user/`, `support/`, `challenges/`, `toolkit/` — if you add a new
-  top-level module folder, register its name in `app_base()`'s
-  `$known_subfolders` list in `includes/compat.php`, or its links will
-  break under subfolder deployment (see the git history for what that
-  bug looked like the first time it happened).
+- `api/` and `feedback/` follow the same one-level-deep folder
+  convention as `admin/`, `user/`, `support/`, `challenges/`,
+  `toolkit/` — if you add a new top-level module folder, register its
+  name in `app_base()`'s `$known_subfolders` list in
+  `includes/compat.php`, or its links will break under subfolder
+  deployment (see the git history for what that bug looked like the
+  first time it happened).
 - New vulnerable modules should get a `'difficulty'` rating
   (`Entry`/`Standard`/`Stretch`) and a two-part `'hints'` array
   (`nudge`/`answer`) in `challenges/index.php`, matching the existing
-  26+8 entries, so they sort correctly and fit the site's format.
+  26+8 entries, so they sort correctly and fit the site's format. If
+  you want vote data on it too, give it the same `challenge_slug()`-
+  based `id` and the `render_feedback_widget()` call already used by
+  every other card — nothing else to wire up.
 - If a new module depends on real concurrency (a race condition, a
   timing attack), test it against actual Apache/PHP-FPM, not just
   `php -S` — see the note above.

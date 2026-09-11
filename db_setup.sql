@@ -63,3 +63,30 @@ CREATE TABLE activity_log (
     ip VARCHAR(45),
     logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Beginner-feedback tools (see feedback/vote.php, feedback/survey.php,
+-- admin/feedback.php). Real feedback capture, not part of the training
+-- lab itself - built correctly, no intentional vulnerabilities here.
+CREATE TABLE challenge_feedback (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL,
+    challenge_id VARCHAR(100) NOT NULL,
+    rating ENUM('too_easy','just_right','too_hard','stuck') NOT NULL,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_vote (username, challenge_id)
+);
+
+CREATE TABLE module_survey (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL,
+    tier VARCHAR(20) NOT NULL,
+    difficulty_rating INT NOT NULL,
+    concept_clarity_rating INT NOT NULL,
+    hint_usefulness_rating INT NOT NULL,
+    confidence_rating INT NOT NULL,
+    most_confusing TEXT,
+    other_comments TEXT,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_survey (username, tier)
+);
+
