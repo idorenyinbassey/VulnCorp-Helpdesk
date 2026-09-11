@@ -19,6 +19,7 @@ $challenges = array(
         'module' => 'Login',
         'target' => '/index.php',
         'objective' => 'Log in as admin without knowing the password.',
+        'concept' => 'The login page builds a database query by gluing your input directly into a string of SQL code, instead of treating it as data. A single quote (<code>\'</code>) ends the text the app expected early, so anything after it gets read as part of the actual SQL command — including a condition like <code>OR \'1\'=\'1\'</code>, which is always true, and a comment marker that deletes the rest of the original query. This bug class is called SQL injection.',
         'tools' => array('Browser', 'Burp Suite (or curl)'),
         'steps' => array(
             'Try a single quote in the username field and see if the app errors out — that tells you the query is unsanitized.',
@@ -32,6 +33,7 @@ $challenges = array(
         'module' => 'Login (UNION SQLi)',
         'target' => '/index.php',
         'objective' => 'Extract every username and password hash from the database through the login form alone.',
+        'concept' => 'A UNION SELECT lets you stack a second, attacker-chosen query onto the one the app intended, as long as both return the same number of columns. Whatever your second query returns lands in the same output the app was already going to show you — so if the page ever echoes back part of the result (a username, a welcome message), you can redirect that output to leak rows from a totally different table, like <code>users</code>.',
         'tools' => array('Burp Suite', 'sqlmap'),
         'steps' => array(
             'Confirm the injection point (see Auth Bypass 101).',
@@ -43,6 +45,7 @@ $challenges = array(
     array(
         'title' => 'Steal a Session', 'module' => 'Ticket Stored XSS', 'target' => '/user/tickets.php',
         'objective' => 'Get a script to execute in another user\'s browser when they view your ticket.',
+        'concept' => 'A browser can\'t tell the difference between "text the app wants to display" and "code the app wants to run" — it just executes any <code>&lt;script&gt;</code> tag it finds in the HTML it receives, no matter where that HTML came from. If the app saves your ticket text to the database and later prints it back into a page without neutralizing it first, your script becomes part of that page for every single person who views it — that\'s what "stored" means here: written once, executed for everyone afterward.',
         'tools' => array('Browser DevTools', 'Burp Suite'),
         'steps' => array(
             'Submit a ticket where the subject or message contains a <code>&lt;script&gt;</code> tag.',
@@ -54,6 +57,7 @@ $challenges = array(
     array(
         'title' => 'Peek at Someone Else\'s Data', 'module' => 'Profile IDOR', 'target' => '/user/profile.php',
         'objective' => 'View and edit another user\'s profile while logged in as a low-privilege user.',
+        'concept' => 'The page decides whose data to show based on an ID number sitting right there in the URL — but it never checks whether that ID actually belongs to the person asking. This is an Insecure Direct Object Reference (IDOR): the app trusts that you\'ll only ever request your own ID, instead of verifying it server-side. Anything a client can see or type, a client can change.',
         'tools' => array('Browser'),
         'steps' => array(
             'Log in as alice and open your own profile — note the URL parameter.',
@@ -65,6 +69,7 @@ $challenges = array(
     array(
         'title' => 'Get a Shell', 'module' => 'Admin Diagnostics — Command Injection', 'target' => '/admin/diagnostics.php',
         'objective' => 'Get the server to run an arbitrary OS command via the ping tool (admin account required).',
+        'concept' => 'To run the actual <code>ping</code> program, the server has to build a real shell command as text and hand it to the operating system — and if your input gets pasted into that text unmodified, you\'re not just supplying a hostname, you\'re supplying part of the command line itself. Characters like <code>;</code> or <code>&amp;&amp;</code> mean "and now run this next command" to a Linux shell, so anything after one of them executes with whatever permissions the web server has.',
         'tools' => array('Browser', 'Burp Suite', 'netcat (for the bonus reverse shell)'),
         'steps' => array(
             'Submit a normal host value first and confirm the ping output.',
@@ -76,6 +81,7 @@ $challenges = array(
     array(
         'title' => 'Upload a Web Shell', 'module' => 'Avatar Upload', 'target' => '/user/upload.php',
         'objective' => 'Get server-side PHP code execution via the avatar upload feature.',
+        'concept' => 'A web server decides how to handle a file almost entirely by its extension — a <code>.jpg</code> gets served as an image, a <code>.php</code> file gets *executed* by the PHP interpreter and its output sent to you. If the app saves whatever you upload into a folder the web server can run scripts from, and never checks that it\'s actually an image, you\'ve just given the server a program to run on your behalf.',
         'tools' => array('Browser', 'a one-line PHP web shell for testing'),
         'steps' => array(
             'Upload a file ending in <code>.php</code> and see if it\'s accepted.',
@@ -87,6 +93,7 @@ $challenges = array(
     array(
         'title' => 'Take Over Any Account', 'module' => 'Change Password', 'target' => '/user/change_password.php',
         'objective' => 'As a low-privilege user, change another account\'s password without knowing it.',
+        'concept' => 'Same underlying idea as the IDOR above, applied somewhere more dangerous: the password-change form reads which account to update from a URL parameter, and never confirms that account is the one you\'re logged in as. Combine "no ownership check" with "no requirement to prove you know the old password" and the form will happily overwrite anyone\'s credentials on request.',
         'tools' => array('Browser or Burp Suite'),
         'steps' => array(
             'Log in as alice and open Change Password — note there\'s no "current password" field at this tier.',
@@ -98,6 +105,7 @@ $challenges = array(
     array(
         'title' => 'Guess the Reset Token', 'module' => 'Forgot Password', 'target' => '/user/forgot_password.php',
         'objective' => 'Reset someone else\'s password without ever seeing the reset link the app "sends" them.',
+        'concept' => 'A password reset link is only as safe as the token inside it — that token is supposed to be an unguessable secret proving "yes, this person really does control that account." If the app builds the token out of information that isn\'t secret at all (like the username by itself), anyone who can do the same math the server does can produce a valid token for any account, without ever intercepting an email or a real reset request.',
         'tools' => array('Browser or a scratch script to compute an MD5'),
         'steps' => array(
             'Submit the forgot-password form for a known username and look at the generated token.',
@@ -109,6 +117,7 @@ $challenges = array(
     array(
         'title' => 'Silent Backdoor Admin', 'module' => 'Create User (CSRF)', 'target' => '/admin/create_user.php',
         'objective' => 'Get an admin to create a new admin account without them intending to, by getting them to load a page you control.',
+        'concept' => 'Your browser automatically attaches your saved login cookies to every request it sends to a site — including requests triggered by a page that isn\'t the site itself, like a form on an attacker\'s page that auto-submits to VulnCorp the moment it loads. The server has no way to tell "the admin clicked a button on our site" apart from "the admin\'s browser was tricked into sending this request," unless the form includes a secret, unpredictable token the attacker\'s page could never have known. Without that token, the cookies alone are enough. This is Cross-Site Request Forgery (CSRF).',
         'tools' => array('Browser', 'a scratch HTML file'),
         'steps' => array(
             'Build a minimal auto-submitting HTML form pointed at <code>/admin/create_user.php</code> with <code>username</code>, <code>password</code>, <code>full_name</code>, <code>email</code>, and <code>role=admin</code> fields.',
@@ -123,6 +132,7 @@ $challenges = array(
     array(
         'title' => 'Bypass the Keyword Filter', 'module' => 'Login', 'target' => '/index.php',
         'objective' => 'The app now strips lowercase <code>union</code>, <code>select</code>, <code>--</code>, <code>#</code>, <code>;</code> from the username. Bypass auth anyway.',
+        'concept' => 'A blacklist filter can only block what its author thought of. This one matches specific keywords as literal lowercase text, but PHP\'s string functions here are case-sensitive — so the filter itself has no concept of "this word, in any capitalization." More importantly, the *auth bypass* from the Simple tier never actually needed the blocked words at all; it only needs an OR condition and a comment, neither of which this filter touches.',
         'tools' => array('Burp Suite'),
         'steps' => array(
             'Re-send your Auth Bypass 101 payload and confirm it now fails.',
@@ -134,6 +144,7 @@ $challenges = array(
     array(
         'title' => 'XSS Past the Blacklist', 'module' => 'Ticket Stored XSS', 'target' => '/user/tickets.php',
         'objective' => 'The app now strips <code>&lt;script&gt;</code> tags (case-insensitively). Get JS to execute anyway.',
+        'concept' => 'The browser doesn\'t care whether JavaScript arrives inside a <code>&lt;script&gt;</code> tag or as an event-handler attribute on some other tag — <code>onerror</code>, <code>onload</code>, <code>onmouseover</code> and dozens more all run JS the instant their event fires. A filter that only recognizes one specific tag name is filtering the *label* on the bug, not the underlying capability.',
         'tools' => array('Browser DevTools', 'PortSwigger XSS cheat sheet (public reference)'),
         'steps' => array(
             'Confirm <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> is now neutered.',
@@ -145,6 +156,7 @@ $challenges = array(
     array(
         'title' => 'Forged MIME Type Upload', 'module' => 'Avatar Upload', 'target' => '/user/upload.php',
         'objective' => 'The app now checks the file\'s Content-Type — but only the header the browser sends, which you control.',
+        'concept' => 'A multipart file upload sends two separate, independent pieces of information: the file\'s actual bytes, and a Content-Type label describing what the browser *claims* those bytes are. Normally your browser sets that label honestly based on the file extension — but nothing stops a proxy like Burp from editing just the label while leaving the real file content (and its real, executable extension) untouched. The server is trusting a claim, not verifying a fact.',
         'tools' => array('Burp Suite (Repeater)'),
         'steps' => array(
             'Try uploading a .php file normally and confirm it\'s now rejected.',
@@ -156,6 +168,7 @@ $challenges = array(
     array(
         'title' => 'Cross-Case Command Injection', 'module' => 'Admin Diagnostics', 'target' => '/admin/diagnostics.php',
         'objective' => 'Semicolons, <code>&&</code>, and <code>||</code> are now stripped. Get command execution anyway.',
+        'concept' => 'Linux shells have more than one way to run "a second thing" inside a command line — semicolons and <code>&amp;&amp;</code> are only the most obvious. Backticks and <code>$()</code> both mean "run this and substitute its output right here," which still counts as executing an arbitrary command, just via a different syntax the filter\'s author didn\'t enumerate. A blacklist of symbols will always be incomplete against a shell with this many ways to express the same idea.',
         'tools' => array('Browser', 'Burp Suite'),
         'steps' => array(
             'Confirm your simple-tier payload is now blocked.',
@@ -167,6 +180,7 @@ $challenges = array(
     array(
         'title' => 'Verify Yourself, Hijack Someone Else', 'module' => 'Change Password', 'target' => '/user/change_password.php',
         'objective' => 'The form now asks for your current password. Find the mismatch between what gets checked and what gets changed.',
+        'concept' => 'Adding an authentication check doesn\'t automatically fix an authorization bug — those are two different questions. "Does this password match the logged-in user?" (authentication: who are you) is not the same question as "which account\'s row is the UPDATE statement about to modify?" (authorization: what are you allowed to touch). This code answers the first question correctly and then answers the second one by blindly trusting a URL parameter, so the two checks end up talking about two different accounts.',
         'tools' => array('Browser or Burp Suite'),
         'steps' => array(
             'Confirm you can no longer change another user\'s password without a current-password value.',
@@ -178,6 +192,7 @@ $challenges = array(
     array(
         'title' => 'Date-Based Token Guessing', 'module' => 'Forgot Password', 'target' => '/user/forgot_password.php',
         'objective' => 'The reset token is no longer just <code>md5(username)</code>. Figure out the new formula and reset an account anyway.',
+        'concept' => 'A "secret" token is only as secret as its least-secret ingredient. Mixing in today\'s date makes the token look different from the simple-tier version, but the date isn\'t secret — everyone in the world can look it up. Any input to a security token that an attacker can also obtain independently doesn\'t add real unpredictability, it just adds an extra step for them to compute.',
         'tools' => array('Browser or a scratch script'),
         'steps' => array(
             'Request a reset for a known username and compare the resulting token against the simple-tier formula — it won\'t match anymore.',
@@ -192,6 +207,7 @@ $challenges = array(
     array(
         'title' => 'Forge a Remember-Me Cookie', 'module' => 'Login (secondary surface)', 'target' => '/index.php (cookie: remember_token)',
         'objective' => 'The login form itself is now fully parameterized. Find the SQLi that got left behind elsewhere in the auth flow.',
+        'concept' => 'Fixing one input doesn\'t fix the vulnerability class everywhere it appears — SQL injection is a pattern (untrusted data glued into a query), and this app has more than one place that pattern shows up. A cookie is just as attacker-controlled as a form field; the only difference is where the data enters the app. If the "remember me" feature builds its query the same unsafe way the login form used to, the bug simply moved, it didn\'t disappear.',
         'tools' => array('Burp Suite'),
         'steps' => array(
             'Register interest in "Remember me" — log in normally with it checked and inspect the cookie you get back.',
@@ -203,6 +219,7 @@ $challenges = array(
     array(
         'title' => 'Reflected XSS via Search', 'module' => 'Tickets', 'target' => '/user/tickets.php?q=',
         'objective' => 'Ticket subject/body are now safely encoded. Find where user input still comes back unescaped.',
+        'concept' => 'Encoding has to happen everywhere untrusted data gets printed into HTML, not just in the one place a developer remembered to fix. "Reflected" XSS works the same way as stored XSS — the browser still just executes whatever HTML/JS it\'s given — the only difference is the payload comes back in the same request instead of being saved first. And context matters: text placed inside an HTML attribute (<code>value="..."</code>) needs to escape the *attribute* first, which is a different job than escaping text placed between tags.',
         'tools' => array('Browser', 'Burp Suite'),
         'steps' => array(
             'Try your intermediate-tier XSS payload in a ticket subject/message and confirm it\'s now escaped.',
@@ -214,6 +231,7 @@ $challenges = array(
     array(
         'title' => 'The Endpoint They Forgot', 'module' => 'Profile — Broken Access Control', 'target' => '/user/profile_export.php',
         'objective' => 'Direct profile viewing/editing is now locked to your own account. Find the endpoint where that fix wasn\'t applied.',
+        'concept' => 'A permission check protects exactly the code it\'s written into — nothing more. When a second endpoint is added later (an "export" feature, an API route, a quick admin tool) that reads the same underlying data through a different file, it needs its *own* copy of that check, and it\'s very easy for that copy to just never get written. This is why real security reviews map every endpoint that touches sensitive data, not just the ones already known to be sensitive.',
         'tools' => array('Burp Suite (or a directory/endpoint wordlist + ffuf)'),
         'steps' => array(
             'Confirm <code>/user/profile.php?id=&lt;someone else&gt;</code> now 403s.',
@@ -225,6 +243,7 @@ $challenges = array(
     array(
         'title' => 'Split-Parameter Command Injection', 'module' => 'Admin Diagnostics', 'target' => '/admin/diagnostics.php',
         'objective' => 'The host field is now properly escaped. There\'s a second field on this form now — is it?',
+        'concept' => 'Escaping one input doesn\'t protect the whole command line if a second, unescaped input gets concatenated in next to it. <code>escapeshellarg()</code> correctly wraps and neutralizes whatever\'s inside it — but only what\'s inside it. If a different variable is pasted into the same shell string without going through the same function, the safety of the first argument doesn\'t transfer to it.',
         'tools' => array('Browser', 'Burp Suite'),
         'steps' => array(
             'Try injecting into the host field directly and confirm <code>escapeshellarg()</code> now neutralizes it.',
@@ -236,6 +255,7 @@ $challenges = array(
     array(
         'title' => 'Polyglot Upload', 'module' => 'Avatar Upload', 'target' => '/user/upload.php',
         'objective' => 'The app now validates real image structure with <code>getimagesize()</code>. Get PHP execution anyway.',
+        'concept' => '<code>getimagesize()</code> checks that a file *starts with* a valid image header — it doesn\'t check that the file contains *only* image data. A file can legally have a few bytes of real GIF header followed by anything else at all, and still pass that check, because nothing reads past the header to confirm the rest. Meanwhile the web server still decides how to execute the file based purely on its extension, which this tier never restricts — so "passes the image check" and "gets executed as PHP" turn out to be two independent, non-conflicting facts about the same file.',
         'tools' => array('exiftool or a hex editor', 'Browser'),
         'steps' => array(
             'Confirm a plain <code>.php</code> file is now rejected by <code>getimagesize()</code>.',
@@ -247,6 +267,7 @@ $challenges = array(
     array(
         'title' => 'Timing-Window Token Guessing', 'module' => 'Forgot Password', 'target' => '/user/forgot_password.php',
         'objective' => 'The token now depends on a unix timestamp, not the date. Reset an account by racing the clock instead of guessing a fixed value.',
+        'concept' => 'A secret with a small search space isn\'t really a secret, even if it changes every second. A timestamp only has as many possible values as there are seconds you\'re willing to try, and if you know roughly *when* the token was generated (because you\'re the one who triggered it), that window shrinks to a handful of guesses instead of millions. Real unpredictability needs enough random bits that guessing is infeasible even with perfect timing information — this token has time, but not enough randomness.',
         'tools' => array('Burp Intruder or a small script'),
         'steps' => array(
             'Trigger a reset request for a target account and note roughly what time you did it.',
@@ -261,6 +282,7 @@ $challenges = array(
     array(
         'title' => 'No More SQLi — Break In Anyway', 'module' => 'Login', 'target' => '/index.php',
         'objective' => 'Every query is parameterized and there\'s no info leakage. The path in is credential/session attack, not injection.',
+        'concept' => 'A "secure" login form can still be attacked by pure repetition if nothing limits how many guesses it will accept. This isn\'t a code injection bug at all — it\'s the absence of a control (rate limiting / account lockout) that should exist alongside correct query handling. Security isn\'t just "did you sanitize input," it\'s also "did you constrain behavior an attacker could abuse even with perfectly clean input."',
         'tools' => array('Hydra or Burp Intruder', 'a small wordlist'),
         'steps' => array(
             'Confirm there is no lockout after repeated failed logins.',
@@ -272,6 +294,7 @@ $challenges = array(
     array(
         'title' => 'Attribute-Injection XSS', 'module' => 'Ticket Signature Sanitizer', 'target' => 'includes/render.php: naive_allowlist_sanitize()',
         'objective' => 'The app allows a small set of "safe" HTML tags (b, i, a) in one field via an allowlist sanitizer. Break out of it.',
+        'concept' => 'An allowlist sanitizer has to validate every single attribute on a tag, not just confirm that one expected attribute is present somewhere. Checking "does this string contain the word href" is very different from "does this tag contain href and *nothing else*" — the first can be satisfied by a tag that also carries an <code>onmouseover</code> or similar event handler sitting right alongside the legitimate attribute, which the check never even looks at.',
         'tools' => array('Browser', 'source review — this one\'s a white-box challenge'),
         'steps' => array(
             'Read <code>naive_allowlist_sanitize()</code> in <code>includes/render.php</code> directly — this challenge is meant to be solved by reading the sanitizer\'s logic, the same way you\'d review a client\'s code in a source-available bounty program.',
@@ -283,6 +306,7 @@ $challenges = array(
     array(
         'title' => 'Privilege Escalation via Mass Assignment', 'module' => 'Profile Update', 'target' => '/user/profile.php',
         'objective' => 'The profile form the browser renders has no role field for regular users. Become admin anyway.',
+        'concept' => 'What a form *shows* you and what the server will *accept* are two completely different things — the HTML is just a suggestion the browser normally follows, not an enforcement mechanism. If the server-side update code takes every field submitted and writes it to the matching database column without checking a fixed list of "fields this role is allowed to set," then hiding a field from the visible form provides zero actual protection: anyone sending a raw HTTP request (not using the rendered form at all) can include it anyway. This is called mass assignment.',
         'tools' => array('Burp Suite (Repeater)'),
         'steps' => array(
             'Log in as a regular user and submit a normal profile update; capture the POST request in Burp.',
@@ -294,6 +318,7 @@ $challenges = array(
     array(
         'title' => 'CSRF the Support Queue', 'module' => 'Support Ticket Status', 'target' => '/support/tickets.php',
         'objective' => 'Below this tier, ticket status changes have no CSRF protection at all. At expert, prove you understand why the token stops it.',
+        'concept' => 'A CSRF token works because it\'s something the attacker\'s page genuinely cannot know: a random value stored server-side in your session and expected back in the form submission. The attacker\'s forged page can make your browser send cookies (those attach automatically to any request), but it has no way to read your session data and copy the matching token into its form — so the server can tell "this request came from our own page" apart from "this request was forged elsewhere," purely by whether the right token showed up.',
         'tools' => array('Browser', 'a scratch HTML file'),
         'steps' => array(
             'Set the mode to <strong>hard</strong> temporarily and build a minimal auto-submitting HTML form pointed at <code>/support/tickets.php</code> with <code>ticket_id</code> and <code>status</code> fields, hosted anywhere.',
@@ -305,6 +330,7 @@ $challenges = array(
     array(
         'title' => 'Confirm the Backdoor Is Closed', 'module' => 'Create User (CSRF)', 'target' => '/admin/create_user.php',
         'objective' => 'Re-run the "Silent Backdoor Admin" PoC from the simple tier against this tier and confirm it now fails — then explain why in one paragraph.',
+        'concept' => 'This challenge is really about closing the loop: you saw the CSRF token explanation above in the abstract, now you\'re confirming it holds up against the *exact* attack that worked three tiers ago. If your explanation from the previous challenge is right, this should fail in a very specific, predictable way — not just "it doesn\'t work," but "it fails with an invalid-token error," because the token check is the only thing that changed between the two tiers.',
         'tools' => array('Browser', 'the same scratch HTML file from the simple-tier challenge'),
         'steps' => array(
             'Reuse (or rebuild) the auto-submitting form that targeted <code>/admin/create_user.php</code> on the simple tier.',
@@ -603,6 +629,12 @@ Within each phase, exhaust passive options first; only escalate to active tools 
         </span>
     </label>
     <p><?php echo $c['objective']; // contains inline <code> markup by design ?></p>
+    <?php if (isset($c['concept'])): ?>
+    <div style="background:#eff6ff;border-left:3px solid #2563eb;padding:8px 12px;margin:8px 0;border-radius:0 4px 4px 0;">
+        <span class="small" style="color:#1e40af;font-weight:bold;">Why this works:</span>
+        <p class="small" style="margin:4px 0 0;color:#1e3a8a;"><?php echo $c['concept']; // contains inline <code> markup by design ?></p>
+    </div>
+    <?php endif; ?>
     <p class="small"><strong>Tools:</strong> <?php echo htmlspecialchars(implode(', ', $c['tools'])); ?></p>
     <ol>
         <?php foreach ($c['steps'] as $s): ?><li><?php echo $s; // inline <code> markup by design ?></li><?php endforeach; ?>

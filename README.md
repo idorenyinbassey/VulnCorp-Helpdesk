@@ -141,13 +141,22 @@ tier since its missing ownership check doesn't depend on the toggle.
 
 Every logged-in user (any role) can open **Challenges** from the
 dashboard, or browse directly to `/challenges/index.php`. It lists,
-per difficulty tier: the objective, the legitimate tools suited to
-it (Burp Suite, sqlmap, Hydra, ffuf, exiftool, browser devtools),
-numbered methodology steps, and a click-to-reveal clue — no full
-payload is pre-typed, so students still have to construct the final
-exploit themselves. It's driven by a plain PHP array at the top of
-`challenges/index.php`, so it's easy to add your own challenges as
-you extend the app.
+per difficulty tier: the objective, a **"Why this works" concept
+block** explaining the underlying mechanism in plain language before
+any hint is given, the legitimate tools suited to it (Burp Suite,
+sqlmap, Hydra, ffuf, exiftool, browser devtools), numbered methodology
+steps, and a click-to-reveal clue — no full payload is pre-typed, so
+students still have to construct the final exploit themselves. It's
+driven by a plain PHP array at the top of `challenges/index.php`, so
+it's easy to add your own challenges as you extend the app.
+
+The concept blocks exist specifically for beginners: knowing that
+`' -- ` bypasses a login form isn't the same as understanding *why* —
+that the query is built by string concatenation, what a quote does to
+that string, what a comment operator removes. Each of the 26 tiered
+challenges has one; the recon and tools-reference sections don't,
+since those are about methodology/tool usage rather than a specific
+vulnerability mechanism.
 
 A short version of what's covered (full detail is on the page itself):
 
