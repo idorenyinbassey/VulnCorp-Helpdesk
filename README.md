@@ -139,6 +139,12 @@ or if something above doesn't fit your setup)
 tier — see the vulnerability matrix below. There's still no
 self-registration; account creation is admin-only by design.
 
+**Other reachable features** (also on the dashboard, also weak below
+expert): a one-time "welcome bonus" claim at `/user/claim_bonus.php`
+(race condition), and a small JSON API at `/api/tickets.php` (broken
+object-level authorization) — good for practicing with Postman/Burp
+against something that isn't an HTML form.
+
 ## 3. Setting the difficulty
 
 Log in as `admin` → **Difficulty Settings**. The mode is stored
@@ -158,9 +164,14 @@ good for live-demoing "watch the same payload stop working."
 | **Change password** (`user/change_password.php`) | No current-password check, no ownership check, no CSRF token → any logged-in user takes over any account by `?id=` | Current password IS checked... but only against **your own** account while the UPDATE still targets `?id=` → verify-yourself-but-hijack-anyone logic bug | Ownership + current-password check both correct; still no CSRF token | Ownership + current-password check + **CSRF token required** — fully closed |
 | **Forgot password** (`user/forgot_password.php`) | Reset token = `md5(username)` — zero secret material, no expiry effectively | Reset token = `md5(username + today's date)` — guessable by anyone who knows the date | Reset token = `md5(username + time())` — guessable within a narrow time window of the real request | Token = `random_bytes(32)`, 15-minute expiry, generic response either way → closed |
 | **Create user** (`admin/create_user.php`, admin-only) | No CSRF token; raw SQL insert (secondary SQLi via `full_name`) → a page an admin merely *visits* can silently create a backdoor admin account | No CSRF token; insert now parameterized | No CSRF token | CSRF token required — closed. This is the highest-impact CSRF in the app: chain it with the stored-XSS-in-a-ticket-an-admin-reads idea from the Simple tier for a full account-takeover writeup. |
+| **Login redirect** (`index.php?redirect=`) | No validation at all → raw open redirect to any external URL | Requires a leading `/` → bypassed by protocol-relative `//evil.com` | Blocks protocol-relative, but "contains the app name anywhere" is a substring check → `http://evil.com/vulnapp` passes | Fixed allowlist of real in-app paths only — closed |
+| **Welcome bonus** (`user/claim_bonus.php`) | Classic TOCTOU (check-then-write, two statements) with a wide 400ms artificial window → reliably double-claimable with a handful of concurrent requests | Same TOCTOU, narrower 50ms window → still exploitable, but needs real concurrent tooling (async script or Burp Intruder concurrent mode), not naive sequential `curl` loops | Single atomic `UPDATE ... WHERE bonus_claimed = 0` checked via `mysqli_affected_rows()` — closed | Same atomic fix as hard — closed |
+| **Tickets API** (`api/tickets.php`, JSON) | No authentication at all — anyone can read any ticket or list all of them | Requires login, but no ownership check — any valid session reads any ticket | Single-ticket lookup (`?id=`) is properly scoped; **list mode** (no `id`) was added later and never got the same check → still leaks every ticket | Both single-ticket and list mode properly scoped to the caller — closed |
 
 `user/profile_export.php` is a good standalone target at every
 tier since its missing ownership check doesn't depend on the toggle.
+The welcome-bonus race condition needed real verification, not just
+code review — see the "Notes" section below for what that took.
 
 ## 5. In-app Challenges page
 
@@ -303,3 +314,32 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
 - This app has no self-registration and no password-reset flow on
   purpose, to keep the four seeded accounts as the whole attack
   surface for the role model.
+- **The welcome-bonus race condition needed a real fix, not just a
+  design.** As first written, PHP's default session file locking would
+  have serialized concurrent requests from the same session — masking
+  the race on a real multi-worker Apache deployment, not just in a
+  test harness. Fixed with an early `session_write_close()` (itself a
+  realistic thing real code does for performance, which is exactly how
+  this bug class often shows up for real). Verifying it also required
+  actually installing Apache + mod_php and firing genuinely concurrent
+  requests — PHP's built-in dev server (`php -S`) is single-threaded
+  and can't demonstrate true concurrency at all, so testing against it
+  alone would have been a false negative. The timing windows (400ms
+  simple / 50ms intermediate) were tuned empirically against that real
+  setup, not guessed.
+
+## 12. Building on this later
+
+- `api/` follows the same one-level-deep folder convention as `admin/`,
+  `user/`, `support/`, `challenges/`, `toolkit/` — if you add a new
+  top-level module folder, register its name in `app_base()`'s
+  `$known_subfolders` list in `includes/compat.php`, or its links will
+  break under subfolder deployment (see the git history for what that
+  bug looked like the first time it happened).
+- New vulnerable modules should get a `'difficulty'` rating
+  (`Entry`/`Standard`/`Stretch`) and a two-part `'hints'` array
+  (`nudge`/`answer`) in `challenges/index.php`, matching the existing
+  26+8 entries, so they sort correctly and fit the site's format.
+- If a new module depends on real concurrency (a race condition, a
+  timing attack), test it against actual Apache/PHP-FPM, not just
+  `php -S` — see the note above.

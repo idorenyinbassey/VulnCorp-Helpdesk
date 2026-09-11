@@ -5,6 +5,59 @@ if (session_id() === '') { session_start(); }
 $error = '';
 $difficulty = get_difficulty($conn);
 
+// ---------------------------------------------------------------
+// Open Redirect module. Post-login "send the user back where they
+// came from" is a very common real-world pattern (SSO flows, "log in
+// to continue" links) and a very common place to find this bug.
+// ---------------------------------------------------------------
+function resolve_login_redirect($difficulty) {
+    $redirect = isset($_REQUEST['redirect']) ? $_REQUEST['redirect'] : '';
+    if ($redirect === '') {
+        return app_base() . '/dashboard.php';
+    }
+
+    if ($difficulty === 'simple') {
+        // No validation at all - the classic open redirect.
+        return $redirect;
+
+    } elseif ($difficulty === 'intermediate') {
+        // "Validates" by requiring the target start with a single slash -
+        // but a protocol-relative URL ("//evil.com") also starts with "/",
+        // and browsers treat "//host" as "same scheme, different host".
+        if (strpos($redirect, '/') === 0) {
+            return $redirect;
+        }
+        return app_base() . '/dashboard.php';
+
+    } elseif ($difficulty === 'hard') {
+        // Blocks protocol-relative URLs specifically, but also "trusts"
+        // any URL that merely contains the app's own name anywhere in it -
+        // which an attacker-controlled domain or path can just as easily
+        // contain (e.g. http://evil.com/vulnapp or http://vulnapp.evil.com).
+        $is_protocol_relative = (strpos($redirect, '//') === 0);
+        if (strpos($redirect, '/') === 0 && !$is_protocol_relative) {
+            return $redirect;
+        }
+        if (!$is_protocol_relative && strpos($redirect, 'vulnapp') !== false) {
+            return $redirect;
+        }
+        return app_base() . '/dashboard.php';
+
+    } else { // expert
+        // Whitelist of real in-app paths only - closed.
+        $allowed = array('/dashboard.php', '/challenges/index.php', '/toolkit/index.php', '/user/tickets.php');
+        $base = app_base();
+        $path = $redirect;
+        if ($base !== '' && strpos($path, $base) === 0) {
+            $path = substr($path, strlen($base));
+        }
+        if (in_array($path, $allowed, true)) {
+            return $base . $path;
+        }
+        return $base . '/dashboard.php';
+    }
+}
+
 // ---- "Remember me" auto-login (HARD tier: cookie value used unsafely in SQL) ----
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_token']) && $difficulty === 'hard') {
     $token = $_COOKIE['remember_token']; // NOT escaped on purpose in hard mode
@@ -91,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_query($conn, "UPDATE users SET session_token = '$token' WHERE id = " . intval($user['id']));
             setcookie('remember_token', $token, time() + 86400 * 7, '/');
         }
-        header('Location: ' . app_base() . '/dashboard.php');
+        header('Location: ' . resolve_login_redirect($difficulty));
         exit;
     } else {
         $error = isset($error) && $error !== '' ? $error : 'Invalid username or password.';
@@ -122,6 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($difficulty === 'hard' || $difficulty === 'expert'): ?>
         <label><input type="checkbox" name="remember" style="width:auto;display:inline-block;"> Remember me</label>
         <?php endif; ?>
+        <input type="hidden" name="redirect" value="<?php echo htmlspecialchars(isset($_GET['redirect']) ? $_GET['redirect'] : ''); ?>">
         <button type="submit">Login</button>
     </form>
     <p class="small">Difficulty tier is controlled by an admin from the admin panel.</p>

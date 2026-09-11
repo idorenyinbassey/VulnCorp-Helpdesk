@@ -13,6 +13,8 @@ role: <span class="role-<?php echo htmlspecialchars($_SESSION['role']); ?>"><?ph
 <li><a href="<?php echo app_base(); ?>/user/tickets.php">My Tickets</a></li>
 <li><a href="<?php echo app_base(); ?>/user/upload.php">Upload Avatar</a></li>
 <li><a href="<?php echo app_base(); ?>/user/change_password.php">Change Password</a></li>
+<li><a href="<?php echo app_base(); ?>/user/claim_bonus.php">🎁 Claim Welcome Bonus</a></li>
+<li><a href="<?php echo app_base(); ?>/api/tickets.php">🔌 Tickets API (JSON)</a></li>
 <li><a href="<?php echo app_base(); ?>/challenges/index.php">🏁 Challenges</a></li>
 <li><a href="<?php echo app_base(); ?>/toolkit/index.php">🧰 Toolkit — Checklists &amp; Kits</a></li>
 <?php if ($_SESSION['role'] === 'support' || $_SESSION['role'] === 'admin'): ?>

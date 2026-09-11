@@ -21,6 +21,8 @@ CREATE TABLE users (
     session_token VARCHAR(64) DEFAULT NULL,
     reset_token VARCHAR(64) DEFAULT NULL,     -- forgot-password flow (see user/forgot_password.php)
     reset_expires DATETIME DEFAULT NULL,
+    bonus_claimed TINYINT(1) NOT NULL DEFAULT 0,  -- race-condition module (see user/claim_bonus.php)
+    bonus_credits INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

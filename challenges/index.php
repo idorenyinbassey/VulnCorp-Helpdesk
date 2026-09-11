@@ -162,6 +162,54 @@ $challenges = array(
             'answer' => 'Same PoC shape as a CSRF form: <code>&lt;form action="http://TARGET/admin/create_user.php" method="POST"&gt;...fields...&lt;/form&gt;&lt;script&gt;document.forms[0].submit()&lt;/script&gt;</code> (replace TARGET with the app\'s actual host/path — e.g. <code>192.168.1.3/vulnapp</code> if that\'s how it\'s deployed). This is the highest-impact bug in the whole simple tier — full persistent admin access, and the admin never clicked "create user."',
         ),
     ),
+    array(
+        'title' => 'Phish via the Login Page', 'module' => 'Open Redirect', 'target' => '/index.php?redirect=',
+        'objective' => 'Get the login page to send a freshly-authenticated user to a site you control, right after they log in.',
+        'difficulty' => 'Entry',
+        'concept' => 'A "log in, then send me back where I was" redirect is extremely common in real apps (SSO flows, "continue to checkout" links) — and if the destination comes straight from a URL parameter with no validation, the app will happily send a user\'s browser anywhere at all immediately after they\'ve proven their identity. That combination (trusted login page + attacker-chosen destination) is exactly what makes open redirects useful for phishing: the link itself points at the real, trusted domain, so it looks completely safe right up until the moment it redirects.',
+        'tools' => array('Browser'),
+        'steps' => array(
+            'Visit the login page with a <code>?redirect=</code> parameter pointing at an external site, e.g. <code>/index.php?redirect=http://example.com</code>.',
+            'Log in normally with valid credentials.',
+            'Watch where you land after a successful login.',
+        ),
+        'hints' => array(
+            'nudge' => 'Look at the login form\'s HTML after loading the page with a redirect parameter — is that parameter carried through into the form at all?',
+            'answer' => '<code>/index.php?redirect=http://evil.com/phish</code> — log in with any valid account and you\'ll be sent straight to evil.com. Nothing about the destination is checked.',
+        ),
+    ),
+    array(
+        'title' => 'Claim It Twice', 'module' => 'Welcome Bonus — Race Condition', 'target' => '/user/claim_bonus.php',
+        'objective' => 'Claim the one-time welcome bonus more than once, ending up with more than 100 credits.',
+        'difficulty' => 'Entry',
+        'concept' => 'The claim handler reads "have I claimed this already?" and writes "now I have" as two separate steps, with a real gap in between. If two requests both ask the question before either one writes the answer, both get told "no, go ahead" — the check each request relied on was already stale by the time it acted on it. This is a race condition (specifically, a time-of-check to time-of-use, or TOCTOU, bug): the vulnerability isn\'t in any single request, it\'s in the gap between two steps that were never made atomic.',
+        'tools' => array('Browser (multiple tabs)', 'or a few terminal windows with curl'),
+        'steps' => array(
+            'Claim the bonus once normally and confirm your balance goes to 100.',
+            'Reset your account (or use a fresh one) and this time, open several browser tabs to the Claim Bonus page at once.',
+            'Click "Claim Bonus" in all the tabs as close together as you can manage — or fire a handful of concurrent <code>curl</code> requests from separate terminals at the same instant.',
+        ),
+        'hints' => array(
+            'nudge' => 'The page checks your status, then updates it — those are two separate moments in time. What happens if two requests both check *before* either one updates?',
+            'answer' => 'At this tier the window between check and write is wide (about half a second) specifically so it\'s reachable by hand — fire 5-10 concurrent requests (multiple browser tabs clicking "Claim" at once, or several parallel <code>curl -d "claim=1" .../user/claim_bonus.php &amp;</code> commands) and check your final balance; more than one claim landing shows up as more than 100 credits.',
+        ),
+    ),
+    array(
+        'title' => 'No Login Required', 'module' => 'Tickets API — Broken Object Level Auth', 'target' => '/api/tickets.php',
+        'objective' => 'Read any ticket\'s full contents — including other users\' private support messages — without ever logging in.',
+        'difficulty' => 'Entry',
+        'concept' => 'This is the same underlying idea as the browser-facing IDOR bugs elsewhere in this app (an ID in the request decides what data comes back, with no check on who\'s asking) — except here it\'s a JSON API rather than an HTML page. APIs often get less scrutiny than the UI that calls them, since "nobody browses to them directly" — but every API endpoint is exactly as reachable with curl or Burp as any web page, authentication or not. Broken Object Level Authorization (BOLA) is the API-specific name for this exact pattern.',
+        'tools' => array('Browser or curl', 'Postman (optional, for exploring a JSON API more comfortably)'),
+        'steps' => array(
+            'Without logging into the app at all, request <code>/api/tickets.php</code> directly.',
+            'Note that you get back ticket data for every user, not just your own (which makes sense, since you\'re nobody at this tier).',
+            'Try requesting a specific ticket by ID: <code>/api/tickets.php?id=1</code>.',
+        ),
+        'hints' => array(
+            'nudge' => 'Try hitting the API URL directly in a private/incognito window, with no session cookie at all — does it ask you to log in?',
+            'answer' => '<code>curl http://TARGET/vulnapp/api/tickets.php</code> with no cookies returns every ticket in the system, and <code>?id=1</code> returns full ticket contents including the message body — no authentication check exists on this endpoint at all.',
+        ),
+    ),
 ),
 
 'intermediate' => array(
@@ -261,6 +309,54 @@ $challenges = array(
             'answer' => 'Token = <code>md5(username . date(\'Y-m-d\'))</code> — you know the date without asking anyone.',
         ),
     ),
+    array(
+        'title' => 'Slash Your Way Out', 'module' => 'Open Redirect', 'target' => '/index.php?redirect=',
+        'objective' => 'The redirect target must now start with a <code>/</code>. Get redirected to an external site anyway.',
+        'difficulty' => 'Standard',
+        'concept' => 'Requiring a leading slash is meant to force a same-site relative path — but a URL starting with <em>two</em> slashes (<code>//evil.com</code>) is what\'s called a protocol-relative URL, and browsers resolve it as "same scheme, different host," not as a path on the current site. It satisfies a naive "starts with /" check while still pointing somewhere else entirely.',
+        'tools' => array('Browser'),
+        'steps' => array(
+            'Confirm <code>?redirect=http://evil.com</code> no longer works at this tier.',
+            'Try a redirect value that starts with a slash but is still a full URL to somewhere else.',
+            'Log in and watch where you land.',
+        ),
+        'hints' => array(
+            'nudge' => 'The check only confirms the value starts with one particular character — is there more than one way to start a URL with that character and still point off-site?',
+            'answer' => '<code>/index.php?redirect=//evil.com/phish</code> — the double slash passes the "starts with /" check but browsers treat <code>//host</code> as an absolute redirect to that host.',
+        ),
+    ),
+    array(
+        'title' => 'Win the Narrow Window', 'module' => 'Welcome Bonus — Race Condition', 'target' => '/user/claim_bonus.php',
+        'objective' => 'The same one-time bonus bug exists here, but the check-and-write gap is much narrower. Land it anyway.',
+        'difficulty' => 'Stretch',
+        'concept' => 'The underlying bug hasn\'t changed at all — it\'s the exact same TOCTOU pattern as the simple tier. What\'s changed is how wide the window is: a handful of manually-clicked browser tabs relies on human reaction time, which is far too slow to reliably land a gap measured in milliseconds. This is the real-world reason race-condition testing tools exist — you need requests dispatched with as little timing jitter between them as possible, which naive sequential scripting (spawning one <code>curl</code> process at a time in a loop) doesn\'t achieve either, since each process spawn itself takes measurable time.',
+        'tools' => array('Burp Suite Intruder (concurrent/throttled mode)', 'or a short async script (Python + aiohttp, or similar)'),
+        'steps' => array(
+            'Confirm that a handful of manually-clicked tabs (which worked at the simple tier) mostly fails to double-claim here.',
+            'Think about what made your simple-tier approach work — was it really "multiple requests," or specifically "multiple requests landing within the same narrow window"?',
+            'Use a tool built for real concurrency — Burp\'s Intruder with concurrent request mode, or a short script that dispatches many requests from a single process at once — rather than a loop that spawns one process per request.',
+        ),
+        'hints' => array(
+            'nudge' => 'A bash loop that does <code>curl ... &amp;</code> many times still has to fork a new process for each one — that overhead alone can be wider than this tier\'s window. What would send many requests without that per-request overhead?',
+            'answer' => 'A burst of 50-100+ requests dispatched from a single script using real async I/O (e.g. Python\'s <code>aiohttp</code> with <code>asyncio.gather</code>) reliably lands multiple successful claims here, even though a naive loop of 40 sequential <code>curl</code> spawns typically lands only one.',
+        ),
+    ),
+    array(
+        'title' => 'Any Session Will Do', 'module' => 'Tickets API — Broken Object Level Auth', 'target' => '/api/tickets.php',
+        'objective' => 'The API now requires login — but does it check whose tickets you\'re actually allowed to see?',
+        'difficulty' => 'Standard',
+        'concept' => 'Requiring authentication answers "who are you?" — it says nothing about "what are you allowed to see?" Those are two different checks (authentication vs. authorization), and this tier only added the first one. Any valid, logged-in session — regardless of role or account — still gets full access to every ticket in the system.',
+        'tools' => array('Browser or curl', 'a second test account'),
+        'steps' => array(
+            'Log in as a regular user (not admin/support) and confirm the unauthenticated request now fails.',
+            'Using that same logged-in session, request a ticket by ID that you know belongs to someone else.',
+            'Confirm you can read its full contents, including the message body.',
+        ),
+        'hints' => array(
+            'nudge' => 'You\'re definitely logged in now — but does the endpoint ever check that the ticket ID you\'re asking for belongs to you specifically?',
+            'answer' => 'Log in as alice, then request <code>/api/tickets.php?id=2</code> (Bob\'s ticket) using alice\'s session cookie — it returns Bob\'s full ticket, no ownership check performed at all.',
+        ),
+    ),
 ),
 
 'hard' => array(
@@ -358,6 +454,38 @@ $challenges = array(
         'hints' => array(
             'nudge' => 'The token isn\'t fixed anymore, but you know roughly when it was generated, because you\'re the one who triggered it — how big is the real search space once you narrow it to a small window of time?',
             'answer' => 'This is the same idea as the simple/intermediate tokens, just with a much smaller, timing-dependent search space instead of zero search space — the fix (expert tier) is real entropy, not a bigger secret.',
+        ),
+    ),
+    array(
+        'title' => 'Contains Isn\'t Equals', 'module' => 'Open Redirect', 'target' => '/index.php?redirect=',
+        'objective' => 'Protocol-relative URLs are blocked now. Find the other flaw in this tier\'s validation.',
+        'difficulty' => 'Standard',
+        'concept' => 'A check like "does this string contain the word vulnapp anywhere" is trying to approximate "is this URL actually on our site" — but <code>strpos()</code> doesn\'t know anything about URL structure. It\'ll happily match the app\'s name sitting in the path, the query string, or even after the real (attacker-controlled) hostname, since none of those positions matter to the function — it just needs the substring to appear <em>somewhere</em>.',
+        'tools' => array('Browser'),
+        'steps' => array(
+            'Confirm a bare <code>//evil.com</code> is now blocked.',
+            'Think about what the validation is actually checking for, rather than what it\'s trying to achieve — a substring match is not the same thing as "this is our domain."',
+            'Build a URL that satisfies a substring check for the app\'s name while still pointing at a domain you control.',
+        ),
+        'hints' => array(
+            'nudge' => 'If the check just looks for the app\'s name appearing anywhere in the string, does it matter where in the URL that name actually shows up?',
+            'answer' => '<code>/index.php?redirect=http://evil.com/vulnapp</code> — the literal text "vulnapp" appears in the URL (just in the wrong place: the attacker\'s own path, not the real app\'s domain), which is enough to satisfy a naive <code>strpos()</code> check.',
+        ),
+    ),
+    array(
+        'title' => 'The List Mode They Forgot', 'module' => 'Tickets API — Broken Object Level Auth', 'target' => '/api/tickets.php',
+        'objective' => 'Fetching a single ticket by ID is properly locked down now. Find the other way this same API leaks everyone\'s data.',
+        'difficulty' => 'Standard',
+        'concept' => 'The single-ticket lookup and the "list all my tickets" mode are two different code paths inside the same file — and a fix applied to one doesn\'t automatically apply to the other. This is the same "endpoint added later, never got the same check" pattern as the browser-facing profile-export bug elsewhere in this app, just showing up inside an API instead of a separate page.',
+        'tools' => array('Browser or curl'),
+        'steps' => array(
+            'Confirm requesting another user\'s ticket by <code>?id=</code> now correctly 403s.',
+            'Try the same endpoint with no <code>id</code> parameter at all.',
+            'Compare what comes back to what a properly-scoped "list my tickets" response should look like.',
+        ),
+        'hints' => array(
+            'nudge' => 'The single-ticket code path clearly checks ownership now — does the "no id given" code path share that same check, or is it a separate block of logic entirely?',
+            'answer' => '<code>/api/tickets.php</code> with no <code>id</code> parameter returns every ticket in the system regardless of who\'s logged in — the list-mode branch never received the ownership filter that was added to the single-ticket branch.',
         ),
     ),
 ),
