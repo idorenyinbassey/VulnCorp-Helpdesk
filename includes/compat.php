@@ -129,7 +129,7 @@ function app_base() {
     if ($base === null) {
         $script_dir = isset($_SERVER['SCRIPT_NAME']) ? dirname($_SERVER['SCRIPT_NAME']) : '';
         $script_dir = str_replace('\\', '/', $script_dir);
-        $known_subfolders = array('admin', 'user', 'support', 'challenges');
+        $known_subfolders = array('admin', 'user', 'support', 'challenges', 'toolkit');
         $last_segment = basename($script_dir);
         if (in_array($last_segment, $known_subfolders, true)) {
             $base = dirname($script_dir);

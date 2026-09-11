@@ -14,6 +14,7 @@ role: <span class="role-<?php echo htmlspecialchars($_SESSION['role']); ?>"><?ph
 <li><a href="<?php echo app_base(); ?>/user/upload.php">Upload Avatar</a></li>
 <li><a href="<?php echo app_base(); ?>/user/change_password.php">Change Password</a></li>
 <li><a href="<?php echo app_base(); ?>/challenges/index.php">🏁 Challenges</a></li>
+<li><a href="<?php echo app_base(); ?>/toolkit/index.php">🧰 Toolkit — Checklists &amp; Kits</a></li>
 <?php if ($_SESSION['role'] === 'support' || $_SESSION['role'] === 'admin'): ?>
 <li><a href="<?php echo app_base(); ?>/support/tickets.php">Support Queue (all tickets)</a></li>
 <?php endif; ?>

@@ -193,7 +193,22 @@ bypassed with devtools or Burp Repeater anyway (the tools this app's
 own challenges tell students to use), so adding them there would
 only teach the wrong lesson — that a bug is fixed when it isn't.
 
-## 8. Suggested student flow
+## 8. Toolkit — downloadable checklists & kits
+
+`/toolkit/index.php` (linked from the dashboard) offers seven real-world
+templates — Safe Testing Rules, Program Policy Check, Program Signal
+Sheet, Recon Note Template, Web App Test Checklist, Report Writing
+Template, and Severity Cheat Sheet — each downloadable in five formats
+(`.md`, `.docx`, `.doc`, `.xlsx`, `.xls`) from `assets/toolkit/<format>/`.
+
+These are **static, pre-generated files**, not rendered per-request —
+PHP 5.2 has no reliable docx/xlsx library, so they're built once with
+modern tooling and just served as plain downloads. If you edit the
+content, regenerate all five formats together (`build_docx.js` /
+`build_xlsx.py` if you kept them, or by hand) so they don't drift out
+of sync with each other.
+
+## 9. Suggested student flow
 
 1. **Recon** — Nmap/Nikto the box, identify the app, map roles by
    registering... actually there's no self-registration (by design,
@@ -209,14 +224,14 @@ only teach the wrong lesson — that a bug is fixed when it isn't.
    (mass assignment, unanchored regex, attribute-injection XSS,
    session prediction + brute force) — good for a capstone/CTF.
 
-## 9. Resetting state
+## 10. Resetting state
 
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
 ```
 
-## 10. Notes
+## 11. Notes
 
 - All output that *is* meant to be safe uses `htmlspecialchars` /
   prepared statements — only the deliberately-vulnerable code paths
