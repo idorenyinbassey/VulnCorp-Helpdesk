@@ -14,12 +14,43 @@ objectives, required tools, steps, and revealable clues.
 > being reachable from anywhere your students don't control. Never
 > deploy it on a real production LAMP stack or expose it publicly.
 
-## 1. Deploy to Metasploitable2 — step by step
+## 1. Deploy to Metasploitable2
 
 **Prerequisites:** Metasploitable2 running in VirtualBox/VMware on a
 **host-only or internal network** (not bridged to the internet), and
 you know its IP (`ip addr` or `ifconfig` on the VM console — default
 creds `msfadmin`/`msfadmin`).
+
+### The fast way: `setup.sh`
+
+```bash
+# On your trainer machine, clone the repo (root IS the app - admin/,
+# user/, index.php etc. sit directly in the cloned folder):
+git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
+
+# Modern OpenSSH's scp defaults to a protocol Metasploitable2's ancient
+# sshd chokes on ("realpath ... path canonicalization failed") - force
+# the legacy protocol with -O:
+scp -O -r VulnCorp-Helpdesk msfadmin@<metasploitable2-ip>:/tmp/
+
+# SSH in and run the setup script:
+ssh msfadmin@<metasploitable2-ip>
+cd /tmp/VulnCorp-Helpdesk
+sudo bash setup.sh
+```
+
+That's it. `setup.sh` starts Apache/MySQL if they're stopped, copies the
+app to `/var/www/vulnapp`, fixes ownership and permissions (including
+the world-writable `uploads/` folder the upload module needs), loads
+the database schema, detects the box's IP, and prints the URL and
+every seeded login. It asks for confirmation before wiping the
+database (skip that with `sudo bash setup.sh --yes`), and it's **safe
+to re-run** any time you pull an update — it refreshes the deployed
+files and resets the database to a clean state, which doubles as a
+quick "reset for a new class" command.
+
+### The manual way (useful for understanding what setup.sh automates,
+or if something above doesn't fit your setup)
 
 1. **Confirm the stack is up on Metasploitable2**
    ```bash
@@ -35,14 +66,7 @@ creds `msfadmin`/`msfadmin`).
 
 2. **Get the project onto your trainer machine, then copy it over**
    ```bash
-   # If you haven't already, clone it locally first. Note the repo root
-   # itself IS the app (admin/, user/, index.php, etc. sit directly in
-   # the cloned folder — there is no nested "vulnapp" subfolder inside it).
    git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
-
-   # Modern OpenSSH's scp defaults to the SFTP protocol, which Metasploitable2's
-   # very old sshd doesn't handle cleanly (you'll see "realpath ... path
-   # canonicalization failed"). Force the legacy SCP protocol with -O:
    scp -O -r VulnCorp-Helpdesk msfadmin@<metasploitable2-ip>:/tmp/
    ```
 
@@ -83,7 +107,8 @@ creds `msfadmin`/`msfadmin`).
    Then: add `Listen 8080` to `/etc/apache2/ports.conf`,
    `sudo a2ensite vulnapp`, `sudo /etc/init.d/apache2 restart`.
    (Port 80 is already used by Metasploitable2's own vulnerable apps —
-   pick a free port like 8080 if you go this route.)
+   pick a free port like 8080 if you go this route. `setup.sh` doesn't
+   set up a vhost — it deploys to `/var/www/vulnapp` either way.)
 
 7. **Browse to it and smoke-test**
    ```
@@ -254,6 +279,12 @@ of sync with each other.
 
 ## 10. Resetting state
 
+Easiest: `cd` into your copy of the repo on Metasploitable2 and re-run
+the setup script — `sudo bash setup.sh --yes` reinstalls the current
+files and resets the database in one command, which is really just
+"start of a new class session."
+
+Or by hand:
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
