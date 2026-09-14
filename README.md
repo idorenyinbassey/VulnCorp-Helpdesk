@@ -16,6 +16,13 @@ objectives, required tools, steps, and revealable clues.
 
 ## 1. Deploy to Metasploitable2
 
+> Want a modern alternative instead — no VM, no SSH, no network
+> conflicts? See [`docker/README.md`](docker/README.md): `cd docker &&
+> docker compose up -d`, same app, same 39 challenges. The rest of
+> this README (credentials, difficulty tiers, Challenges page, Toolkit,
+> feedback tools) applies identically either way — only the deployment
+> mechanics below are Metasploitable2-specific.
+
 **Prerequisites:** Metasploitable2 running in VirtualBox/VMware on a
 **host-only or internal network** (not bridged to the internet), and
 you know its IP (`ip addr` or `ifconfig` on the VM console — default

@@ -1,0 +1,28 @@
+# NOT for shipping - this is a stand-in for docker/Dockerfile, built from
+# a locally-debootstrapped Ubuntu base (local/ubuntu-base:24.04) instead of
+# the official php:8.2-apache image, because the sandbox this was developed
+# in cannot reach Docker Hub. It installs the equivalent packages via apt
+# (Ubuntu's own archive) to verify the app/orchestration logic actually
+# works end-to-end. A normal internet connection can use docker/Dockerfile
+# directly instead.
+FROM local/ubuntu-base:24.04
+
+RUN echo "deb http://archive.ubuntu.com/ubuntu noble main universe" > /etc/apt/sources.list \
+    && echo "deb http://archive.ubuntu.com/ubuntu noble-updates main universe" >> /etc/apt/sources.list \
+    && echo "deb http://security.ubuntu.com/ubuntu noble-security main universe" >> /etc/apt/sources.list
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    apache2 php php-mysqli libapache2-mod-php \
+    && a2enmod php8.3 \
+    && apt-get clean
+
+WORKDIR /var/www/html
+COPY . /var/www/html/
+
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html \
+    && mkdir -p /var/www/html/uploads \
+    && chmod -R 777 /var/www/html/uploads
+
+EXPOSE 80
+CMD ["apache2ctl", "-D", "FOREGROUND"]

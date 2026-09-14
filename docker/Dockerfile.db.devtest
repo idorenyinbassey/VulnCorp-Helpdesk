@@ -1,0 +1,25 @@
+# NOT for shipping - stand-in for the official mariadb:10.11 image, built
+# from a locally-debootstrapped Ubuntu base since this sandbox can't reach
+# Docker Hub. Mimics enough of the official image's env-var-driven first-boot
+# behavior (MYSQL_ROOT_PASSWORD, MYSQL_DATABASE, running *.sql files from
+# /docker-entrypoint-initdb.d/) to verify docker-compose.yml's orchestration.
+FROM local/ubuntu-base:24.04
+
+RUN echo "deb http://archive.ubuntu.com/ubuntu noble main universe" > /etc/apt/sources.list \
+    && echo "deb http://archive.ubuntu.com/ubuntu noble-updates main universe" >> /etc/apt/sources.list \
+    && echo "deb http://security.ubuntu.com/ubuntu noble-security main universe" >> /etc/apt/sources.list
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-server && apt-get clean
+
+# The Debian/Ubuntu package (unlike the official upstream Docker image)
+# initializes /var/lib/mysql during package install. Clear it so the
+# entrypoint's own first-boot check actually runs on container start.
+RUN rm -rf /var/lib/mysql/*
+
+COPY docker/devtest-db-entrypoint.sh /devtest-db-entrypoint.sh
+RUN chmod +x /devtest-db-entrypoint.sh \
+    && mkdir -p /run/mysqld /docker-entrypoint-initdb.d \
+    && chown -R mysql:mysql /run/mysqld /var/lib/mysql
+
+EXPOSE 3306
+ENTRYPOINT ["/devtest-db-entrypoint.sh"]

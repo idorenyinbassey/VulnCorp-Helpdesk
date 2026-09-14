@@ -4,10 +4,13 @@
 
 require_once dirname(__FILE__) . '/compat.php';
 
-$DB_HOST = 'localhost';
-$DB_USER = 'root';        // change to a dedicated low-priv user if you prefer; see README
-$DB_PASS = '';             // set this to match your MySQL root/user password on Metasploitable2
-$DB_NAME = 'vulnapp';
+$DB_HOST = getenv('DB_HOST') !== false ? getenv('DB_HOST') : 'localhost';
+$DB_USER = getenv('DB_USER') !== false ? getenv('DB_USER') : 'root';        // change to a dedicated low-priv user if you prefer; see README
+$DB_PASS = getenv('DB_PASS') !== false ? getenv('DB_PASS') : '';             // set this to match your MySQL root/user password on Metasploitable2
+$DB_NAME = getenv('DB_NAME') !== false ? getenv('DB_NAME') : 'vulnapp';
+// Environment variables let the Docker deployment (docker/) point this at
+// its own db container without touching these defaults, which stay exactly
+// as Metasploitable2 needs them when no env vars are set.
 
 $conn = mysqli_connect($DB_HOST, $DB_USER, $DB_PASS, $DB_NAME);
 if (!$conn) {

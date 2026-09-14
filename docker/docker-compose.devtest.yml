@@ -1,0 +1,35 @@
+# NOT for shipping - verifies the orchestration logic in docker-compose.yml
+# (env var wiring, healthcheck-gated startup, schema auto-load, port mapping)
+# using only locally-built images, since this sandbox can't reach Docker Hub.
+services:
+  db:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.db.devtest
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: vulncorp_lab
+      MYSQL_DATABASE: vulnapp
+    volumes:
+      - ../db_setup.sql:/docker-entrypoint-initdb.d/db_setup.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.devtest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASS: vulncorp_lab
+      DB_NAME: vulnapp
+    ports:
+      - "8080:80"
