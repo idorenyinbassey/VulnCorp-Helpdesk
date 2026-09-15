@@ -2,9 +2,17 @@
 
 A modern alternative to the Metasploitable2 deployment path in the
 main README — same app, same 39 challenges, same Toolkit and feedback
-tools, no SSH/scp/init.d/network-conflict dance. Good for a student's
-own laptop, a CI environment, or anywhere you'd rather not stand up a
-whole second VM.
+tools, no SSH/scp/init.d/network-conflict dance.
+
+**Worth being clear about when this actually helps:** Docker pays off
+when you already have it running somewhere — a laptop with Docker
+Desktop, a CI pipeline, a host you don't want to install Apache/PHP/
+MariaDB directly onto. If you're creating a **dedicated VM just for
+this app**, Docker doesn't save you anything — you still have to
+provision that VM either way, so a native install
+(`setup-modern.sh`, from the repo root, documented in the main
+README's section 2) is simpler for that specific case. This file
+covers the Docker path for when it *is* the better fit.
 
 **Nothing about the vulnerable app changed for this.** The only
 non-cosmetic code change anywhere in this repo for Docker support is

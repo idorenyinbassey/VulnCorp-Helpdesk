@@ -55,12 +55,13 @@ person's best guess at what a beginner needs.
 
 ## 1. Deploy to Metasploitable2
 
-> Want a modern alternative instead — no VM, no SSH, no network
-> conflicts? See [`docker/README.md`](docker/README.md): `cd docker &&
-> docker compose up -d`, same app, same 39 challenges. The rest of
-> this README (credentials, difficulty tiers, Challenges page, Toolkit,
-> feedback tools) applies identically either way — only the deployment
-> mechanics below are Metasploitable2-specific.
+> Setting up a separate VM instead of using Metasploitable2? See
+> section 2 below — `setup-modern.sh` is a one-command native install
+> for a modern Ubuntu VM (no Docker needed), or use
+> [`docker/README.md`](docker/README.md) if you already have Docker
+> running somewhere. Same app, same 39 challenges either way — only
+> the deployment mechanics differ from what's below, which is
+> Metasploitable2-specific.
 
 **Prerequisites:** Metasploitable2 running in VirtualBox/VMware on a
 **host-only or internal network** (not bridged to the internet), and
@@ -170,19 +171,22 @@ or if something above doesn't fit your setup)
    adapter is host-only/internal. If you've bridged it, disable that
    before going further.
 
-## 2. Deploy the Docker version on its own VM
+## 2. Deploy on a separate modern VM (no Metasploitable2 needed)
 
-Docker won't run on Metasploitable2 itself — it ships Ubuntu 8.04 with
-a 2008-era kernel, well before Docker's runtime requirements (or
-Docker itself) existed, and nothing installs that on it. The Docker
-path from section 1's callout above is a genuinely separate deployment
-target: a different, modern machine, not a layer on top of
-Metasploitable2. The clean way to run it inside the same lab is a
-**third VM** alongside Kali and Metasploitable2.
+If you're standing up a dedicated VM for this anyway, **`setup-modern.sh`
+is the simpler option** — a native install (Apache/PHP/MariaDB directly
+on the VM), no Docker required. Docker only pays for itself when you
+already have it running somewhere for other reasons (a laptop with
+Docker Desktop already installed, a CI pipeline, etc.) — if the VM is
+being created *just* for this, wrapping it in containers adds a layer
+of complexity without adding anything, since you still have to
+provision that VM either way.
+
+### Option A: native install with `setup-modern.sh` (recommended for a dedicated VM)
 
 1. **Create a new VM** in VirtualBox — a lightweight modern Linux
-   distro (Ubuntu Server 22.04/24.04 LTS is a safe default). Docker +
-   Apache + MariaDB is light: 1-2GB RAM, 1 vCPU, ~15GB disk is plenty.
+   distro (Ubuntu Server 22.04/24.04 LTS is a safe default). 1-2GB
+   RAM, 1 vCPU, ~15GB disk is plenty.
 2. **Attach it to the same isolated network** as Kali and
    Metasploitable2 (e.g. the `hacking_lab` NAT Network from the
    deployment-path troubleshooting elsewhere in this repo's history) —
@@ -190,34 +194,53 @@ Metasploitable2. The clean way to run it inside the same lab is a
    LAN, same reasoning as the Metasploitable2 setup above.
 3. **Give it a static IP** inside that network, for the same reason
    recommended for Metasploitable2 — a shifting address breaks every
-   command below that hardcodes it.
-4. **Install Docker normally.** This VM has real internet access
-   (unlike the sandbox this app was developed in, which specifically
-   could not reach Docker Hub — see `docker/README.md` for what that
-   affected and how it was worked around), so the standard install
-   just works:
-   ```bash
-   sudo apt update
-   sudo apt install -y docker.io docker-compose-v2
-   sudo systemctl enable --now docker
-   ```
-5. **Clone and run:**
+   command that hardcodes it.
+4. **Clone and run:**
    ```bash
    git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
-   cd VulnCorp-Helpdesk/docker
-   sudo docker compose up -d
+   cd VulnCorp-Helpdesk
+   sudo bash setup-modern.sh
    ```
-6. **Verify from Kali**, not just from the VM itself — Docker's
-   `"8080:80"` mapping binds all interfaces by default and should be
-   reachable right away, but a VM-level firewall (`ufw`, if enabled)
-   can still block it even though Docker is listening correctly:
+   This installs Apache/PHP/MariaDB if they're not already present,
+   fixes MariaDB's modern `auth_socket` default (which otherwise
+   blocks the app from connecting at all — see the note below), and
+   deploys to `/var/www/html/vulnapp` (this distro's actual default
+   `DocumentRoot`, unlike `setup.sh`'s Metasploitable2-specific
+   `/var/www/vulnapp`).
+5. **Verify from Kali:**
    ```bash
-   curl -I http://<this-vm-ip>:8080/
+   curl -I http://<this-vm-ip>/vulnapp/
    ```
 
-This gives a clean three-VM lab — Kali (attacker), Metasploitable2
-(the old-school multi-service target), and this VM (VulnCorp Helpdesk
-via Docker) — independent of each other, nothing shared, each
+`setup-modern.sh` is a genuinely different script from `setup.sh`, not
+the same file reused — the two environments differ in three concrete
+ways that were each confirmed by actually running the Metasploitable2
+script against a modern Ubuntu install and watching it fail:
+`ifconfig`'s modern output format doesn't match the old-format parsing
+`setup.sh` relies on (IP shows as a placeholder, not a real address);
+modern Apache's default `DocumentRoot` is `/var/www/html`, not
+`/var/www` (the app was completely unreachable, HTTP 404); and modern
+MariaDB's `auth_socket` default for `root` blocks any connection that
+isn't from the literal Linux `root` user, which is exactly what the
+web server's PHP process is not (`Access denied for user
+'root'@'localhost'`). `setup-modern.sh` fixes all three.
+
+### Option B: Docker, if you already use it elsewhere
+
+See [`docker/README.md`](docker/README.md) for the full walkthrough.
+Same idea as above (own VM, same isolated network, static IP) except
+step 4 becomes:
+```bash
+sudo apt install -y docker.io docker-compose-v2
+git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
+cd VulnCorp-Helpdesk/docker
+sudo docker compose up -d
+```
+and the app lands on port 8080 instead of 80.
+
+Either option gives the same clean three-VM lab — Kali (attacker),
+Metasploitable2 (the old-school multi-service target), and this VM
+(VulnCorp Helpdesk) — independent of each other, nothing shared, each
 reachable from Kali for whichever exercise needs it.
 
 ## 3. Login credentials
@@ -417,12 +440,15 @@ calibration further.
 
 ## 12. Resetting state
 
-Easiest: `cd` into your copy of the repo on Metasploitable2 and re-run
-the setup script — `sudo bash setup.sh --yes` reinstalls the current
-files and resets the database in one command, which is really just
-"start of a new class session."
+Easiest: `cd` into your copy of the repo and re-run the setup script
+for however you deployed — `sudo bash setup.sh --yes` on Metasploitable2,
+`sudo bash setup-modern.sh --yes` on a native modern-VM install, or
+`docker compose down -v && docker compose up -d --build` for Docker.
+Each reinstalls the current files and resets the database in one
+command, which is really just "start of a new class session."
 
-Or by hand:
+Or by hand (paths shown for Metasploitable2 — swap in
+`/var/www/html/vulnapp` for a modern-VM install):
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
@@ -474,3 +500,14 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
 - If a new module depends on real concurrency (a race condition, a
   timing attack), test it against actual Apache/PHP-FPM, not just
   `php -S` — see the note above.
+- `setup.sh` (Metasploitable2) and `setup-modern.sh` (modern Ubuntu/
+  Debian) are separate scripts on purpose, not one script branching on
+  OS detection — they target genuinely different environments
+  (`/etc/init.d` vs. `systemctl`, `/var/www` vs. `/var/www/html` as
+  `DocumentRoot`, MySQL 5.0's open-by-default root vs. modern
+  MariaDB's `auth_socket`). If you change deployment behavior in one,
+  check whether the other needs the equivalent change too — don't
+  assume fixing one automatically fixes the other, since that
+  assumption is exactly what broke `setup.sh` when it was first run
+  against a modern machine (three separate real bugs, found by
+  actually running it, not by inspection).
