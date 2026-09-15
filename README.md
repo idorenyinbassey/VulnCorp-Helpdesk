@@ -8,6 +8,45 @@ changes *how* each vulnerability is exploitable, and an in-app
 **Challenges** page (`/challenges/index.php`) with per-tier
 objectives, required tools, steps, and revealable clues.
 
+## Why this exists
+
+Tools like DVWA, Mutillidae, WebGoat, and PortSwigger's Web Security
+Academy are excellent and don't need replacing — this app doesn't try
+to. It exists because none of them are built *around a specific
+curriculum*: this one's difficulty tiers, hint wording, "Why this
+works" explanations, and the Tools Reference / Toolkit / Challenges
+pages are all written in the language of one particular 12-week
+cybersecurity bootcamp, so a student moves from lecture straight into
+a lab that already assumes the same vocabulary and sequencing the
+lecture used. The tiered toggle (the same bug, exploitable a different
+way at each difficulty) also isn't common elsewhere — most training
+apps are fixed-difficulty.
+
+It's meant as a **guided on-ramp that comes *before* DVWA and
+PortSwigger**, not a replacement for them — once a student is
+comfortable here, those tools cover far more ground (JWT, GraphQL,
+HTTP smuggling, and other categories this single custom app
+structurally can't demonstrate) and have years of community
+calibration behind them that this app doesn't have yet. The
+beginner-feedback tools (`/feedback/`) exist specifically to start
+building that calibration from real student data instead of one
+person's best guess at what a beginner needs.
+
+## Who it's for
+
+- **Students new to web app security** (the primary audience) —
+  the Simple tier, the concept blocks, and the staged nudge-before-
+  answer hints are aimed at someone who's never exploited SQL
+  injection before, not someone who already has.
+- **Students working toward bug bounty hunting specifically** — the
+  Tools Reference, recon phase, and Toolkit (report templates,
+  severity cheat sheet, program-vetting checklists) are there because
+  finding the bug is only part of that skill set.
+- **The trainer/instructor running the program** — the difficulty
+  toggle, the admin feedback dashboard, and `setup.sh`/Docker
+  deployment options are built for someone who needs to demo, reset,
+  and re-calibrate this across multiple cohorts, not just run it once.
+
 > ⚠️ **Use only on an isolated lab network** (e.g. alongside Metasploitable2
 > in a host-only/NAT VirtualBox network, or a segmented VLAN with no
 > route to production or the internet). This app has no business
@@ -131,7 +170,57 @@ or if something above doesn't fit your setup)
    adapter is host-only/internal. If you've bridged it, disable that
    before going further.
 
-## 2. Login credentials
+## 2. Deploy the Docker version on its own VM
+
+Docker won't run on Metasploitable2 itself — it ships Ubuntu 8.04 with
+a 2008-era kernel, well before Docker's runtime requirements (or
+Docker itself) existed, and nothing installs that on it. The Docker
+path from section 1's callout above is a genuinely separate deployment
+target: a different, modern machine, not a layer on top of
+Metasploitable2. The clean way to run it inside the same lab is a
+**third VM** alongside Kali and Metasploitable2.
+
+1. **Create a new VM** in VirtualBox — a lightweight modern Linux
+   distro (Ubuntu Server 22.04/24.04 LTS is a safe default). Docker +
+   Apache + MariaDB is light: 1-2GB RAM, 1 vCPU, ~15GB disk is plenty.
+2. **Attach it to the same isolated network** as Kali and
+   Metasploitable2 (e.g. the `hacking_lab` NAT Network from the
+   deployment-path troubleshooting elsewhere in this repo's history) —
+   reachable from Kali for exercises, still isolated from your home
+   LAN, same reasoning as the Metasploitable2 setup above.
+3. **Give it a static IP** inside that network, for the same reason
+   recommended for Metasploitable2 — a shifting address breaks every
+   command below that hardcodes it.
+4. **Install Docker normally.** This VM has real internet access
+   (unlike the sandbox this app was developed in, which specifically
+   could not reach Docker Hub — see `docker/README.md` for what that
+   affected and how it was worked around), so the standard install
+   just works:
+   ```bash
+   sudo apt update
+   sudo apt install -y docker.io docker-compose-v2
+   sudo systemctl enable --now docker
+   ```
+5. **Clone and run:**
+   ```bash
+   git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
+   cd VulnCorp-Helpdesk/docker
+   sudo docker compose up -d
+   ```
+6. **Verify from Kali**, not just from the VM itself — Docker's
+   `"8080:80"` mapping binds all interfaces by default and should be
+   reachable right away, but a VM-level firewall (`ufw`, if enabled)
+   can still block it even though Docker is listening correctly:
+   ```bash
+   curl -I http://<this-vm-ip>:8080/
+   ```
+
+This gives a clean three-VM lab — Kali (attacker), Metasploitable2
+(the old-school multi-service target), and this VM (VulnCorp Helpdesk
+via Docker) — independent of each other, nothing shared, each
+reachable from Kali for whichever exercise needs it.
+
+## 3. Login credentials
 
 | Username | Password    | Role    |
 |----------|-------------|---------|
@@ -152,13 +241,13 @@ expert): a one-time "welcome bonus" claim at `/user/claim_bonus.php`
 object-level authorization) — good for practicing with Postman/Burp
 against something that isn't an HTML form.
 
-## 3. Setting the difficulty
+## 4. Setting the difficulty
 
 Log in as `admin` → **Difficulty Settings**. The mode is stored
 server-side and applies globally to every session immediately —
 good for live-demoing "watch the same payload stop working."
 
-## 4. What changes at each tier
+## 5. What changes at each tier
 
 | Module | Simple | Intermediate | Hard | Expert |
 |---|---|---|---|---|
@@ -180,7 +269,7 @@ tier since its missing ownership check doesn't depend on the toggle.
 The welcome-bonus race condition needed real verification, not just
 code review — see the "Notes" section below for what that took.
 
-## 5. In-app Challenges page
+## 6. In-app Challenges page
 
 Every logged-in user (any role) can open **Challenges** from the
 dashboard, or browse directly to `/challenges/index.php`. It lists,
@@ -234,7 +323,7 @@ format used in real CSRF bug reports (it only works against a
 target you're already authorized to test, and does nothing on its
 own without a logged-in victim visiting it).
 
-## 6. Deployment path handling
+## 7. Deployment path handling
 
 The app works whether it's deployed at the web server's root, in a
 subfolder (e.g. `/vulnapp/`, as in the steps above), or behind a
@@ -247,7 +336,7 @@ you add new pages, use `app_base()` for any `href`, `src`, or
 `href="/dashboard.php"`-style absolute path will break the moment
 someone deploys this one folder deeper or shallower than you did.
 
-## 7. Client-side JavaScript
+## 8. Client-side JavaScript
 
 `assets/app.js` (loaded site-wide via `includes/footer.php`) adds pure
 UX polish: a live password-match/strength indicator on Change
@@ -264,7 +353,7 @@ bypassed with devtools or Burp Repeater anyway (the tools this app's
 own challenges tell students to use), so adding them there would
 only teach the wrong lesson — that a bug is fixed when it isn't.
 
-## 8. Toolkit — downloadable checklists & kits
+## 9. Toolkit — downloadable checklists & kits
 
 `/toolkit/index.php` (linked from the dashboard) offers seven real-world
 templates — Safe Testing Rules, Program Policy Check, Program Signal
@@ -279,7 +368,7 @@ content, regenerate all five formats together (`build_docx.js` /
 `build_xlsx.py` if you kept them, or by hand) so they don't drift out
 of sync with each other.
 
-## 9. Beginner-feedback tools
+## 10. Beginner-feedback tools
 
 Real feedback capture, not part of the training lab itself — built
 correctly, with no intentional vulnerabilities.
@@ -307,7 +396,7 @@ one person reasoning about what a beginner needs, not by actual
 beginner data. Point a real cohort at this before trusting the
 calibration further.
 
-## 10. Suggested student flow
+## 11. Suggested student flow
 
 1. **Recon** — Nmap/Nikto the box, identify the app, map roles by
    registering... actually there's no self-registration (by design,
@@ -326,7 +415,7 @@ calibration further.
    (`/feedback/survey.php`) before moving on, so you have a record of
    how that specific cohort experienced it.
 
-## 11. Resetting state
+## 12. Resetting state
 
 Easiest: `cd` into your copy of the repo on Metasploitable2 and re-run
 the setup script — `sudo bash setup.sh --yes` reinstalls the current
@@ -339,7 +428,7 @@ mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
 ```
 
-## 12. Notes
+## 13. Notes
 
 - All output that *is* meant to be safe uses `htmlspecialchars` /
   prepared statements — only the deliberately-vulnerable code paths
@@ -366,7 +455,7 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
   simple / 50ms intermediate) were tuned empirically against that real
   setup, not guessed.
 
-## 13. Building on this later
+## 14. Building on this later
 
 - `api/` and `feedback/` follow the same one-level-deep folder
   convention as `admin/`, `user/`, `support/`, `challenges/`,
