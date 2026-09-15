@@ -60,7 +60,11 @@ fi
 echo ""
 echo "-- Installing Apache, PHP, and MariaDB if not already present --"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+# Tolerate a failure on any single configured repo (common on real machines
+# with third-party sources) - as long as apt's own archive is reachable,
+# the packages below will still install fine even if `apt-get update`
+# itself returns non-zero because some unrelated repo was unreachable.
+apt-get update -qq || true
 apt-get install -y -qq apache2 mariadb-server php php-mysqli libapache2-mod-php > /dev/null
 
 echo "-- Starting Apache and MariaDB --"
