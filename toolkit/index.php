@@ -50,7 +50,7 @@ $templates = array(
         'slug' => '20-lab-practices',
         'title' => '20 Bug Bounty Lab Practices',
         'desc' => 'Full-workflow lab manual using VulnCorp Helpdesk as the live target: 20 step-by-step labs from recon through chained exploits to a complete engagement report, with required tools and a "Report it" note on every lab.',
-        'formats' => array('md', 'docx', 'doc'),
+        'formats' => array('md', 'docx', 'doc', 'pdf'),
     ),
 );
 
@@ -60,6 +60,7 @@ $all_formats = array(
     'doc' => array('ext' => 'doc', 'label' => '.doc'),
     'xlsx' => array('ext' => 'xlsx', 'label' => '.xlsx'),
     'xls' => array('ext' => 'xls', 'label' => '.xls'),
+    'pdf' => array('ext' => 'pdf', 'label' => '.pdf'),
 );
 
 include dirname(__FILE__) . '/../includes/header.php';

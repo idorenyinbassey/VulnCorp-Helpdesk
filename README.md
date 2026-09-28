@@ -393,8 +393,16 @@ templates, each downloadable from `assets/toolkit/<format>/`:
   target. Every lab names its required tools, the difficulty tier to
   set, numbered steps, a success check, and a "Report it" note showing
   what that finding looks like in a real submission. Narrative
-  document, not a checklist, so it ships in three formats only
-  (`.md`, `.docx`, `.doc` — no spreadsheet formats).
+  document, not a checklist, so it ships in four formats
+  (`.md`, `.docx`, `.doc`, `.pdf` — no spreadsheet formats).
+
+  **A separate Trainer Manual edition exists** (adds a "For the
+  Trainer" pacing/usage note plus a compact answer-key summary table)
+  but is **deliberately not shipped anywhere under this repo or the
+  app's `/toolkit/`** — that page is reachable by every logged-in role,
+  including the seeded student accounts, so an answer key there would
+  just hand the exercise to students through their own login. Keep
+  the trainer edition somewhere outside the deployed app entirely.
 
 These are **static, pre-generated files**, not rendered per-request —
 PHP 5.2 has no reliable docx/xlsx library, so they're built once with
