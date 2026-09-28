@@ -46,9 +46,15 @@ $templates = array(
         'title' => 'Severity Cheat Sheet',
         'desc' => 'Critical/High/Medium/Low/Informational definitions with concrete examples, plus the one-line test to sanity-check your own rating.',
     ),
+    array(
+        'slug' => '20-lab-practices',
+        'title' => '20 Bug Bounty Lab Practices',
+        'desc' => 'Full-workflow lab manual using VulnCorp Helpdesk as the live target: 20 step-by-step labs from recon through chained exploits to a complete engagement report, with required tools and a "Report it" note on every lab.',
+        'formats' => array('md', 'docx', 'doc'),
+    ),
 );
 
-$formats = array(
+$all_formats = array(
     'md' => array('ext' => 'md', 'label' => '.md'),
     'docx' => array('ext' => 'docx', 'label' => '.docx'),
     'doc' => array('ext' => 'doc', 'label' => '.doc'),
@@ -60,15 +66,19 @@ include dirname(__FILE__) . '/../includes/header.php';
 ?>
 <h2>Toolkit — Checklists &amp; Kits</h2>
 <p class="small">Downloadable templates for real (authorized) engagements — the paperwork side of the
-methodology from the Challenges page. Every template is available in five formats; grab whichever fits
-how you work.</p>
+methodology from the Challenges page. Most are available in five formats (.md/.docx/.doc/.xlsx/.xls);
+the lab manual is a narrative document so it skips the spreadsheet formats. Grab whichever fits how you work.</p>
 
 <?php foreach ($templates as $t): ?>
 <div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fff;">
     <strong><?php echo htmlspecialchars($t['title']); ?></strong>
     <p class="small" style="margin:6px 0 10px;"><?php echo htmlspecialchars($t['desc']); ?></p>
     <div>
-    <?php foreach ($formats as $key => $f): ?>
+    <?php
+    $this_templates_formats = isset($t['formats']) ? $t['formats'] : array_keys($all_formats);
+    foreach ($this_templates_formats as $key):
+        $f = $all_formats[$key];
+    ?>
         <a class="btn" style="margin:0 6px 6px 0;padding:5px 12px;font-size:13px;"
            href="<?php echo app_base(); ?>/assets/toolkit/<?php echo $key; ?>/<?php echo $t['slug']; ?>.<?php echo $f['ext']; ?>"
            download><?php echo $f['label']; ?></a>
@@ -78,7 +88,7 @@ how you work.</p>
 <?php endforeach; ?>
 
 <p class="small">These are static files, not generated per-request — edit them locally after downloading
-and keep your own copy. If you update the source content, regenerate all five formats together so they
-stay in sync.</p>
+and keep your own copy. If you update the source content, regenerate every listed format for that
+template together so they stay in sync.</p>
 
 <?php include dirname(__FILE__) . '/../includes/footer.php'; ?>

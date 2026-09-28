@@ -378,18 +378,35 @@ only teach the wrong lesson — that a bug is fixed when it isn't.
 
 ## 9. Toolkit — downloadable checklists & kits
 
-`/toolkit/index.php` (linked from the dashboard) offers seven real-world
-templates — Safe Testing Rules, Program Policy Check, Program Signal
-Sheet, Recon Note Template, Web App Test Checklist, Report Writing
-Template, and Severity Cheat Sheet — each downloadable in five formats
-(`.md`, `.docx`, `.doc`, `.xlsx`, `.xls`) from `assets/toolkit/<format>/`.
+`/toolkit/index.php` (linked from the dashboard) offers eight real-world
+templates, each downloadable from `assets/toolkit/<format>/`:
+
+- **Safe Testing Rules**, **Program Policy Check**, **Program Signal
+  Sheet**, **Recon Note Template**, **Web App Test Checklist**,
+  **Report Writing Template**, **Severity Cheat Sheet** — seven
+  checklist/reference templates, each in five formats (`.md`, `.docx`,
+  `.doc`, `.xlsx`, `.xls`).
+- **20 Bug Bounty Lab Practices** — a full-workflow lab manual (recon
+  → mapping → simple-tier exploits → filter evasion → hard-tier
+  chained flaws → expert-tier logic bugs → API testing → a complete
+  engagement report) using VulnCorp Helpdesk itself as the live
+  target. Every lab names its required tools, the difficulty tier to
+  set, numbered steps, a success check, and a "Report it" note showing
+  what that finding looks like in a real submission. Narrative
+  document, not a checklist, so it ships in three formats only
+  (`.md`, `.docx`, `.doc` — no spreadsheet formats).
 
 These are **static, pre-generated files**, not rendered per-request —
 PHP 5.2 has no reliable docx/xlsx library, so they're built once with
 modern tooling and just served as plain downloads. If you edit the
-content, regenerate all five formats together (`build_docx.js` /
-`build_xlsx.py` if you kept them, or by hand) so they don't drift out
-of sync with each other.
+content, regenerate every format that template ships in together
+(`build_docx.js`/`build_xlsx.py` if you kept them, `pandoc` for the
+lab manual, or by hand) so they don't drift out of sync with each
+other. The Toolkit page's `$templates` array supports a per-template
+`'formats'` list (defaulting to all five) specifically so a narrative
+document like this one doesn't need spreadsheet formats it has no use
+for — see `toolkit/index.php` if you add another document-shaped
+template later.
 
 ## 10. Beginner-feedback tools
 
@@ -437,6 +454,13 @@ calibration further.
 6. **After each tier** — have students fill out the tier survey
    (`/feedback/survey.php`) before moving on, so you have a record of
    how that specific cohort experienced it.
+
+Or skip the free-form version of the above and hand out the **20 Bug
+Bounty Lab Practices** guide from the Toolkit instead — it's this same
+progression already broken into 20 numbered, step-by-step labs (with
+required tools and a report-writing note on each one), ending in a
+capstone lab where students compile their findings from every prior
+lab into one submission-ready engagement report.
 
 ## 12. Resetting state
 
