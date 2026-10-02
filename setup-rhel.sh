@@ -112,13 +112,23 @@ echo "-- Checking SELinux --"
 if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" != "Disabled" ]; then
     echo "   SELinux is $(getenforce) - setting the context httpd needs to"
     echo "   both serve this app and write to uploads/."
+    if ! command -v semanage >/dev/null 2>&1; then
+        echo "   semanage isn't installed - installing policycoreutils-python-utils"
+        "$PKG_MGR" install -y policycoreutils-python-utils > /dev/null 2>&1 || true
+    fi
     if command -v semanage >/dev/null 2>&1; then
         semanage fcontext -a -t httpd_sys_rw_content_t "$APP_DIR/uploads(/.*)?" 2>/dev/null || true
         restorecon -Rv "$APP_DIR" > /dev/null 2>&1 || true
     else
-        echo "   semanage isn't installed (package: policycoreutils-python-utils) -"
-        echo "   install it and re-run, or the upload module will fail under SELinux"
-        echo "   even though the file permissions above are correct."
+        # Installing the package above failed (e.g. no network, repo
+        # disabled) - don't silently claim success: Apache would be
+        # blocked from writing to uploads/ by SELinux despite the Unix
+        # permissions already being correct, and the upload module would
+        # fail in a way that looks like this script worked.
+        echo "   Error: semanage is required to configure the SELinux upload"
+        echo "   context and could not be installed. Install"
+        echo "   policycoreutils-python-utils manually and re-run this script."
+        exit 1
     fi
 else
     echo "   SELinux is disabled or not present - nothing to do here."
