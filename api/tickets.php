@@ -7,6 +7,7 @@
 // (BOLA) - the API-specific name for the same IDOR pattern elsewhere in
 // this app, applied to a JSON endpoint instead of an HTML page.
 require_once dirname(__FILE__) . '/../includes/db.php';
+require_once dirname(__FILE__) . '/../includes/jwt.php';
 if (session_id() === '') { session_start(); }
 
 header('Content-Type: application/json');
@@ -26,20 +27,43 @@ function http_response_code_compat($code) {
     header('HTTP/1.1 ' . $code . ' ' . $text);
 }
 
+// ---------------------------------------------------------------
+// Auth context: a browser session cookie OR a Bearer JWT (see
+// api/auth_token.php / includes/jwt.php) - a real API often supports
+// both a logged-in UI and a token-based integration client, and this
+// app now does too. Whichever one authenticates (if either) sets
+// $auth_user_id/$auth_role, which everything below uses in place of
+// reading $_SESSION directly. The JWT path's own bugs (alg confusion,
+// missing expiry, no revocation) live entirely in jwt_verify() -
+// nothing here changes because of them.
+// ---------------------------------------------------------------
+$auth_user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+$auth_role = isset($_SESSION['role']) ? $_SESSION['role'] : null;
+
+$auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
+if ($auth_header !== '' && stripos($auth_header, 'Bearer ') === 0) {
+    $bearer_token = trim(substr($auth_header, 7));
+    $claims = jwt_verify($bearer_token, get_jwt_secret($conn), $difficulty);
+    if ($claims !== null && isset($claims['sub'])) {
+        $auth_user_id = (int)$claims['sub'];
+        $auth_role = isset($claims['role']) ? $claims['role'] : null;
+    }
+}
+
 if ($difficulty === 'simple') {
     // No authentication check at all. Anyone who can reach this URL -
     // logged in or not - can pull any ticket by ID.
     // (falls through to the query below)
 
 } elseif ($difficulty === 'intermediate') {
-    // Requires *a* valid session - but any logged-in user's session
-    // works for any ticket, since there's still no ownership check.
-    if (!isset($_SESSION['user_id'])) {
+    // Requires *a* valid session or token - but any valid one works for
+    // any ticket, since there's still no ownership check.
+    if ($auth_user_id === null) {
         api_error(401, 'Login required');
     }
 
 } elseif ($difficulty === 'hard') {
-    if (!isset($_SESSION['user_id'])) {
+    if ($auth_user_id === null) {
         api_error(401, 'Login required');
     }
     // Ownership IS checked below for a single ticket by id - but the
@@ -47,7 +71,7 @@ if ($difficulty === 'simple') {
     // check applied to it.
 
 } else { // expert
-    if (!isset($_SESSION['user_id'])) {
+    if ($auth_user_id === null) {
         api_error(401, 'Login required');
     }
     // Both single-ticket and list mode are properly scoped below.
@@ -65,8 +89,8 @@ if ($id !== null) {
     }
 
     if ($difficulty === 'hard' || $difficulty === 'expert') {
-        $is_owner = (isset($_SESSION['user_id']) && (int)$ticket['user_id'] === (int)$_SESSION['user_id']);
-        $is_staff = (isset($_SESSION['role']) && in_array($_SESSION['role'], array('support', 'admin'), true));
+        $is_owner = ($auth_user_id !== null && (int)$ticket['user_id'] === $auth_user_id);
+        $is_staff = ($auth_role !== null && in_array($auth_role, array('support', 'admin'), true));
         if (!$is_owner && !$is_staff) {
             api_error(403, 'Not your ticket');
         }
@@ -80,7 +104,7 @@ if ($id !== null) {
     if ($difficulty === 'expert') {
         // Properly scoped to the caller's own tickets only.
         $stmt = mysqli_prepare($conn, "SELECT id, user_id, subject, status, created_at FROM tickets WHERE user_id = ?");
-        mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user_id']);
+        mysqli_stmt_bind_param($stmt, 'i', $auth_user_id);
         mysqli_stmt_execute($stmt);
         $rows = stmt_fetch_all($stmt);
     } else {

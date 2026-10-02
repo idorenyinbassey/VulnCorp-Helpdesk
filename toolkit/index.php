@@ -49,7 +49,7 @@ $templates = array(
     array(
         'slug' => '20-lab-practices',
         'title' => '20 Bug Bounty Lab Practices',
-        'desc' => 'Full-workflow lab manual using VulnCorp Helpdesk as the live target: 20 step-by-step labs from recon through chained exploits to a complete engagement report, with required tools and a "Report it" note on every lab.',
+        'desc' => 'Full-workflow lab manual using VulnCorp Helpdesk as the live target: 20 step-by-step labs from recon through chained exploits to a complete engagement report, plus 2 bonus labs on JWT auth flaws and a CTF capstone, with required tools and a "Report it" note on every lab.',
         'formats' => array('md', 'docx', 'doc', 'pdf'),
     ),
 );

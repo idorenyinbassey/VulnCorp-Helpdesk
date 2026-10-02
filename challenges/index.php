@@ -241,6 +241,54 @@ $challenges = array(
             'answer' => '<code>curl http://TARGET/vulnapp/api/tickets.php</code> with no cookies returns every ticket in the system, and <code>?id=1</code> returns full ticket contents including the message body — no authentication check exists on this endpoint at all.',
         ),
     ),
+    array(
+        'title' => 'Forge Your Own Token', 'module' => 'API Token (JWT) Auth', 'target' => '/api/auth_token.php, /api/ticket_update.php (Bearer header)',
+        'objective' => 'Without ever knowing anyone\'s password or api_key, craft your own JSON Web Token claiming the admin role, and use it to update a ticket via the API.',
+        'difficulty' => 'Standard',
+        'concept' => 'A JWT is just three base64url-encoded segments — a header, a payload, and a signature — glued together with dots. Nothing stops you from building the header and payload segments yourself; the only thing supposed to stop you is the signature, which proves the server itself produced those claims. If the server\'s verification code ever lets a token through without checking that signature at all — for example when the header claims <code>"alg":"none"</code> — then the payload you wrote by hand is trusted exactly as if the server had issued it.',
+        'tools' => array('Burp Suite (or curl)', 'a scratch script to base64url-encode JSON (or python3 -c)'),
+        'steps' => array(
+            'Look at a real token from <code>/api/auth_token.php</code> (exchange any seeded account\'s api_key for one) and split it on the dots — note it\'s just three base64url-encoded pieces.',
+            'Build your own header <code>{"typ":"JWT","alg":"none"}</code> and payload <code>{"sub":1,"username":"admin","role":"admin"}</code>, base64url-encode each, and join them with dots — leave the third (signature) segment empty.',
+            'Send it as <code>Authorization: Bearer &lt;your-token&gt;</code> to <code>/api/ticket_update.php</code> with a <code>ticket_id</code> and a field to change, and confirm it\'s accepted as if you were really logged in as admin.',
+        ),
+        'hints' => array(
+            'nudge' => 'A JWT\'s header names the algorithm the server is supposed to use to check the signature — what happens if you simply claim there isn\'t one?',
+            'answer' => 'Base64url-encode <code>{"typ":"JWT","alg":"none"}</code> and <code>{"sub":1,"username":"admin","role":"admin"}</code>, join them with a dot, and append a trailing dot with nothing after it for the empty signature segment — that full three-part string is your forged token.',
+        ),
+    ),
+    array(
+        'title' => 'Hijack Any Ticket, No Field Off Limits', 'module' => 'API Ticket Update — Mass Assignment', 'target' => '/api/ticket_update.php',
+        'objective' => 'Using any authenticated API token, take over someone else\'s ticket completely — reassign it to yourself and change its priority — without being staff or the owner.',
+        'difficulty' => 'Standard',
+        'concept' => 'An update endpoint that accepts a JSON/form body has to decide which of the submitted fields it\'s actually willing to write to the database — a real implementation enforces a fixed allowlist per role. This endpoint, at this tier, does neither: whatever field names show up in the request get written straight through, with no ownership check on the ticket and no restriction on which columns a non-staff caller can touch, including who owns the ticket and how urgent it\'s marked.',
+        'tools' => array('Burp Suite or curl', 'a token from /api/auth_token.php for any seeded account'),
+        'steps' => array(
+            'Exchange a non-owner, non-staff account\'s api_key for a token at <code>/api/auth_token.php</code>.',
+            'POST to <code>/api/ticket_update.php</code> with that token, a <code>ticket_id</code> belonging to someone else, and extra fields the visible UI never exposes: <code>user_id</code> and <code>priority</code>.',
+            'Confirm the ticket\'s owner and priority both changed — you never needed to own it or be staff.',
+        ),
+        'hints' => array(
+            'nudge' => 'This endpoint has no HTML form to tell you what fields "should" exist — what happens if you just submit the column names you\'d expect the database to have?',
+            'answer' => 'POST <code>ticket_id=&lt;someone else\'s ticket&gt;&amp;user_id=&lt;your own id&gt;&amp;priority=urgent</code> with your Bearer token — every field lands, including ones no legitimate UI ever lets you set.',
+        ),
+    ),
+    array(
+        'title' => 'Guess Until You\'re Right', 'module' => 'API Token Request — Rate Limiting', 'target' => '/api/auth_token.php',
+        'objective' => 'Brute-force a seeded account\'s api_key against the token-exchange endpoint, with nothing slowing you down.',
+        'difficulty' => 'Entry',
+        'concept' => 'An api_key is only as strong as the cost of guessing it wrong repeatedly — and that cost is entirely a function of how many guesses an attacker is allowed to make. A credential of any length is eventually brute-forceable if the endpoint checking it never slows down, locks out, or even notices repeated failures; the fix for this class of problem is a control (rate limiting), not a longer secret.',
+        'tools' => array('Hydra, Burp Intruder, or a short script', 'a small wordlist of plausible api_key guesses'),
+        'steps' => array(
+            'Send a handful of deliberately wrong <code>api_key</code> guesses for a known username to <code>/api/auth_token.php</code> in quick succession.',
+            'Confirm none of them are ever rejected with anything other than a plain "invalid" response — no lockout message, no increasing delay.',
+            'Point an actual brute-force tool at it and confirm it can run as many guesses as you let it.',
+        ),
+        'hints' => array(
+            'nudge' => 'Nothing about the response changes no matter how many times in a row you guess wrong — what does that tell you about trying a LOT of guesses?',
+            'answer' => 'This is the same class of finding as the "No More SQLi — Break In Anyway" login-brute-force challenge, applied to an API credential instead of a password — write it up as "Missing Rate Limiting on API Token Exchange."',
+        ),
+    ),
 ),
 
 'intermediate' => array(
@@ -388,6 +436,38 @@ $challenges = array(
             'answer' => 'Log in as alice, then request <code>/api/tickets.php?id=2</code> (Bob\'s ticket) using alice\'s session cookie — it returns Bob\'s full ticket, no ownership check performed at all.',
         ),
     ),
+    array(
+        'title' => 'Capitalize Your Way Past the Filter', 'module' => 'API Token (JWT) Auth', 'target' => '/api/auth_token.php, /api/ticket_update.php (Bearer header)',
+        'objective' => 'The server now rejects <code>alg: none</code> exactly as written. Get the same forged-token trick working anyway.',
+        'difficulty' => 'Standard',
+        'concept' => 'A blacklist check that compares strings has to decide whether "none" and "None" and "NONE" count as the same value — and PHP\'s default string comparison is case-sensitive unless a function explicitly says otherwise. Blocking one exact spelling of a dangerous value is not the same as blocking the concept that value represents.',
+        'tools' => array('Burp Suite (or curl)', 'a scratch script to base64url-encode JSON'),
+        'steps' => array(
+            'Resend your Simple-tier forged token unchanged and confirm it\'s now rejected.',
+            'Change only the case of the <code>alg</code> value in your header — nothing else — and rebuild the token.',
+            'Resend it and see whether the capitalization alone was enough to get back through.',
+        ),
+        'hints' => array(
+            'nudge' => 'The filter blocks one exact piece of text — does it care how that text is capitalized?',
+            'answer' => 'A header of <code>{"typ":"JWT","alg":"None"}</code> (or <code>"NONE"</code>) still skips the signature check — only the literal lowercase <code>"none"</code> is blocked.',
+        ),
+    ),
+    array(
+        'title' => 'Verified Owner, Unverified Transfer', 'module' => 'API Ticket Update — Mass Assignment', 'target' => '/api/ticket_update.php',
+        'objective' => 'The endpoint now checks that you own the ticket (or are staff) before allowing any update. Use your own legitimate ownership to steal the ticket anyway.',
+        'difficulty' => 'Stretch',
+        'concept' => 'This is the same shape of bug as the browser-facing "Verify Yourself, Hijack Someone Else" change-password flaw elsewhere in this app: an authorization check answers "do you currently own this resource?", but if the request is also allowed to change *who owns it* as part of the very same write, the check you just passed stops describing the ticket\'s state the instant the UPDATE statement runs.',
+        'tools' => array('Burp Suite or curl', 'two seeded accounts'),
+        'steps' => array(
+            'Get a token for an account that genuinely owns a ticket (e.g. alice, who owns ticket 1).',
+            'POST an update that includes a legitimate field change alongside <code>user_id=&lt;someone else\'s id&gt;</code>.',
+            'Confirm the ownership check passed (because you really did own it going in) — and that the ticket now belongs to someone else coming out.',
+        ),
+        'hints' => array(
+            'nudge' => 'The check confirms you own the ticket *before* the update runs — does it also confirm you still own it, specifically, after your own update changes who the owner is?',
+            'answer' => 'As the owner, POST <code>ticket_id=1&amp;user_id=&lt;bob\'s id&gt;</code> — the ownership check you legitimately pass is for the ticket\'s state going in, not its state coming out.',
+        ),
+    ),
 ),
 
 'hard' => array(
@@ -519,6 +599,54 @@ $challenges = array(
             'answer' => '<code>/api/tickets.php</code> with no <code>id</code> parameter returns every ticket in the system regardless of who\'s logged in — the list-mode branch never received the ownership filter that was added to the single-ticket branch.',
         ),
     ),
+    array(
+        'title' => 'Replay It Forever', 'module' => 'API Token (JWT) Auth', 'target' => '/api/auth_token.php, /api/ticket_update.php (Bearer header)',
+        'objective' => 'Alg forgery no longer works at all — every token must carry a real, correctly-computed signature. Find the other way a token outlives its intended lifetime.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A JWT can carry an <code>exp</code> (expiration) claim specifically so a stolen or leaked token eventually stops working on its own, without anyone having to revoke it by hand. That claim is only a protection if something on the server side actually reads it and rejects anything past that timestamp — a token with a perfectly valid signature and an <code>exp</code> value in the past is still just as "real" as one that\'s still fresh, unless the verifier specifically checks the clock.',
+        'tools' => array('Burp Suite', 'a legitimate token from /api/auth_token.php', 'a script that can read the current time'),
+        'steps' => array(
+            'Get a real, correctly-issued token from <code>/api/auth_token.php</code> using any seeded account\'s api_key, and decode its payload (base64url-decode the middle segment) to see its <code>exp</code> value.',
+            'Note that this token is only meant to last 15 minutes from issuance.',
+            'Keep using the exact same token well past that 15-minute window and confirm the API still accepts it.',
+        ),
+        'hints' => array(
+            'nudge' => 'The token has an <code>exp</code> field right there in its payload — does anything on the server side actually look at it before this tier?',
+            'answer' => 'At hard tier, alg-confusion is closed and the signature is genuinely required — but nothing checks <code>exp</code> at all, so a token captured once (sniffed off the wire, or simply kept around after your legitimate session ended) remains valid indefinitely.',
+        ),
+    ),
+    array(
+        'title' => 'The Field Everyone Forgot to Lock', 'module' => 'API Ticket Update — Mass Assignment', 'target' => '/api/ticket_update.php',
+        'objective' => '<code>user_id</code> is finally off-limits no matter who you are. Find the other field that was supposed to be staff-only and isn\'t.',
+        'difficulty' => 'Standard',
+        'concept' => 'Closing one over-broad field (<code>user_id</code>) doesn\'t automatically mean every other sensitive field got the same scrutiny — a reviewer fixing the obvious "anyone can steal any ticket" bug can very plausibly stop there without re-auditing every remaining column for the same class of problem. <code>priority</code> looks like an internal triage field a regular user shouldn\'t touch, but nothing in this tier\'s code actually enforces that.',
+        'tools' => array('Burp Suite or curl', 'your own ticket as a non-staff user'),
+        'steps' => array(
+            'Confirm <code>user_id</code> no longer transfers ownership, even when you legitimately own the ticket.',
+            'On a ticket you genuinely own, try setting <code>priority</code> to something like <code>urgent</code> — a field no regular user\'s UI exposes at all.',
+            'Confirm it\'s accepted even though you\'re not support or admin staff.',
+        ),
+        'hints' => array(
+            'nudge' => 'One dangerous field just got closed — are you sure every *other* field on this same endpoint got the same review?',
+            'answer' => 'POST <code>ticket_id=&lt;your own ticket&gt;&amp;priority=urgent</code> as a plain user — it\'s written through with no staff check at all, unlike <code>user_id</code>.',
+        ),
+    ),
+    array(
+        'title' => 'Two Ways Around the Lockout', 'module' => 'API Token Request — Rate Limiting', 'target' => '/api/auth_token.php',
+        'objective' => 'A lockout now exists after repeated failures. Find two independent ways around it.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A rate limit has to be keyed by something that actually, uniquely identifies the attacker across their requests — and both halves of a naive key can be wrong at once. A username comparison that\'s case-sensitive treats "alice" and "ALICE" as two different counters even though they target the same account; and a client-IP value read from a header the client itself sends (<code>X-Forwarded-For</code>) is exactly as trustworthy as any other request body — which is to say, not trustworthy at all unless a real reverse proxy is the one setting it.',
+        'tools' => array('Burp Suite or curl', 'a known username'),
+        'steps' => array(
+            'Trigger the lockout normally: send enough wrong <code>api_key</code> guesses for one exact username/IP combination to get rate-limited.',
+            'Confirm it\'s really locked out at that same exact username and your real IP — then retry with ONLY the username\'s capitalization changed.',
+            'Separately, retry with the original exact username again, but this time send a different <code>X-Forwarded-For</code> header value on each request.',
+        ),
+        'hints' => array(
+            'nudge' => 'The lockout is keyed by two pieces of information about you — your username and your "IP." Is either one of those actually fixed, from the server\'s point of view?',
+            'answer' => 'Varying the username\'s capitalization (<code>Alice</code> vs <code>alice</code>) lands on a fresh counter because the comparison is case-sensitive; separately, setting a different <code>X-Forwarded-For: 1.2.3.4</code> value on every request resets the IP half of the key, since the server trusts that header outright instead of using the real connecting IP.',
+        ),
+    ),
 ),
 
 'expert' => array(
@@ -602,6 +730,38 @@ $challenges = array(
             'answer' => 'The response should say "CSRF token invalid — request rejected." The key point for your write-up: the attacker\'s page can forge the request and the cookies ride along automatically, but it can\'t read the token out of your session to include it — that\'s the whole defense.',
         ),
     ),
+    array(
+        'title' => 'Outlive Your Own Password', 'module' => 'API Token (JWT) Auth', 'target' => '/api/auth_token.php, /api/ticket_update.php (Bearer header)',
+        'objective' => 'Expiration is finally enforced too. Find the one way a token can still outlive the account state it was issued for.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A signed, non-expired token with correct claims looks indistinguishable from a legitimate one, by design — that\'s the whole point of signing it. But "signed correctly" only proves the token hasn\'t been tampered with since issuance; it says nothing about whether the account it describes has changed since then. A stateless token scheme like this one has no built-in way to answer "has something happened to this account that should invalidate tokens issued before now?" unless the app deliberately adds one (a token-version column, a revocation list) — and this app never does, at any tier.',
+        'tools' => array('Burp Suite', 'your own test account'),
+        'steps' => array(
+            'Log in as any user and get a token for yourself from <code>/api/auth_token.php</code>.',
+            'Confirm the token works normally against <code>/api/ticket_update.php</code>.',
+            'Change your own password via <code>/user/change_password.php</code> (a completely unrelated, legitimate feature) — then replay the exact same, still-unexpired token and see whether it still works.',
+        ),
+        'hints' => array(
+            'nudge' => 'You just proved <code>exp</code> and the signature are both solid — now ask what changing an account\'s password is actually supposed to do to any tokens issued before that change.',
+            'answer' => 'The token keeps working after the password change, because nothing in this app ever invalidates a previously-issued token for any reason short of its own <code>exp</code> timestamp — there\'s no revocation list or token-version check anywhere. In a real write-up, this is the "Missing Token Revocation on Credential Change" finding: not a payload, an absent control, the same flavor as the login brute-force finding elsewhere at this tier.',
+        ),
+    ),
+    array(
+        'title' => 'The Check Reads One Thing, the Write Reads Another', 'module' => 'API Ticket Update — Mass Assignment', 'target' => '/api/ticket_update.php',
+        'objective' => '<code>priority</code> is now properly staff-only, checked against the POST body. Find the one place a request can still slip a restricted field through.',
+        'difficulty' => 'Stretch',
+        'concept' => 'PHP exposes request data through multiple distinct superglobals that largely overlap — <code>$_POST</code> only has the body\'s form-encoded fields, while <code>$_REQUEST</code> additionally folds in the query string. A security check and the code it\'s meant to gate have to read from the *same* source of truth, or the check can pass against one view of the request while a completely different value from another part of the same request gets written. This is the sort of bug a source-available review would need to actually read the code to find — a black-box attacker would have to notice the inconsistency by trial and error, the same white-box flavor as the signature-sanitizer attribute-injection XSS elsewhere in this app.',
+        'tools' => array('Burp Suite', 'source review (this one\'s a white-box challenge)'),
+        'steps' => array(
+            'Confirm sending <code>priority</code> in the POST body as a non-staff owner is now correctly rejected.',
+            'Read <code>api/ticket_update.php</code>\'s expert-tier branch directly — notice which superglobal the privilege check inspects, and which one the final write loop reads from.',
+            'Resend the exact same update, but move <code>priority</code> from the POST body onto the URL\'s query string instead.',
+        ),
+        'hints' => array(
+            'nudge' => 'The rejection you just triggered checked one specific PHP superglobal for the restricted field — does the code that actually performs the write look in exactly that same place, or somewhere broader?',
+            'answer' => 'POST to <code>/api/ticket_update.php?priority=urgent</code> (field in the query string, not the POST body) with <code>ticket_id</code> still in the body — the privilege check only inspects <code>$_POST</code> and never sees it, but the write loop reads <code>$_REQUEST</code>, which includes the query string.',
+        ),
+    ),
 ),
 );
 
@@ -666,6 +826,39 @@ $recon = array(
             'Decide which findings are worth pursuing manually vs. noise.',
         ),
         'clue' => 'Automated scanners are a starting point, not a substitute — everything interesting in this lab (the IDOR, the mass assignment, the CSRF) needs a human to reason about app logic.',
+    ),
+);
+
+// ---------------------------------------------------------------
+// Capture-the-flag challenges — like $recon above, these are NOT gated
+// by the difficulty toggle (both chains below work at every tier; see
+// each entry's clue for why). Each rewards a literal FLAG{...} string
+// instead of just confirming a bypass, and each chains more than one
+// bug together rather than exercising a single vulnerability class.
+// ---------------------------------------------------------------
+$ctf_flags = array(
+    array(
+        'title' => 'The Forgotten Export', 'module' => 'Chained: Profile IDOR → API Key Leak → JWT Auth', 'target' => '/user/profile_export.php, /api/auth_token.php, /api/tickets.php',
+        'objective' => 'Starting from a brand-new, unprivileged account, chain three separate bugs into reading a ticket only an admin should ever see — and recover the flag inside it.',
+        'tools' => array('Browser or Burp Suite', 'curl (optional, for the API steps)'),
+        'steps' => array(
+            'Log in as any seeded non-admin account and request <code>/user/profile_export.php?id=1</code> (admin\'s user id) — this endpoint has no ownership check at any difficulty tier.',
+            'From the JSON it returns, note the <code>api_key</code> field — a credential, not harmless metadata, even though this endpoint treats it that way.',
+            'Exchange that leaked <code>api_key</code> (with username <code>admin</code>) for a JWT at <code>/api/auth_token.php</code>.',
+            'Use the resulting token as a Bearer token against <code>/api/tickets.php?id=3</code> and read the flag in the ticket\'s message.',
+        ),
+        'clue' => 'This chain works at every difficulty tier, because the first link — <code>profile_export.php</code>\'s missing ownership check — was never gated by the difficulty toggle in the first place (see the Hard-tier "The Endpoint They Forgot" challenge above). Everything downstream of leaking that one field just follows from there.',
+    ),
+    array(
+        'title' => 'Forge Your Way In', 'module' => 'API Ticket Update — Unverified Admin Branch', 'target' => '/api/ticket_update.php?admin_note=1',
+        'objective' => 'Reach a hidden admin-only branch of the ticket-update API using nothing but a hand-forged, completely unsigned token — no valid credentials of any kind, and independent of whatever difficulty tier the app is set to.',
+        'tools' => array('Burp Suite or curl', 'a scratch script to base64url-encode JSON'),
+        'steps' => array(
+            'Build your own unsigned JWT: header <code>{"typ":"JWT","alg":"none"}</code>, payload <code>{"role":"admin"}</code>, empty signature segment.',
+            'Send it as a Bearer token to <code>/api/ticket_update.php?admin_note=1</code> — note the <code>admin_note</code> query parameter.',
+            'Confirm it works regardless of the app\'s current difficulty setting, and recover the flag in the response.',
+        ),
+        'clue' => 'Not every endpoint necessarily routes its auth through the same shared, tier-aware check as the rest of the app — this one was wired to a raw token decoder instead, the same "forgot to call the shared check" shape as a couple of this app\'s other bugs. Difficulty-tier fixes elsewhere in the JWT module never touch this specific branch at all.',
     ),
 );
 
@@ -772,7 +965,7 @@ $methodology = array(
 );
 $vuln_categories = array(
     array('Injection', 'SQLi, XSS (reflected/stored/DOM), SSTI, command injection, XXE, NoSQLi'),
-    array('Broken Auth', 'Default creds, password reset flaws, 2FA bypass, session fixation, JWT issues'),
+    array('Broken Auth', 'Default creds, password reset flaws, 2FA bypass, session fixation, JWT issues (alg confusion, missing expiry, no revocation)'),
     array('Access Control', 'IDOR, horizontal/vertical privilege escalation, forced browsing, BOLA'),
     array('Business Logic', 'Race conditions, workflow bypass, price manipulation, coupon abuse'),
     array('File Upload', 'Web shells, extension bypass, path traversal, content-type spoofing'),
@@ -781,6 +974,7 @@ $vuln_categories = array(
     array('Info Disclosure', 'Exposed .git/.env, verbose errors, API keys in source, directory listing'),
     array('Misconfig', 'CORS, security headers, open redirects, verbose errors, debug endpoints'),
     array('API-specific', 'Mass assignment, broken object-level auth, rate limiting, GraphQL introspection'),
+    array('CTF-style chains', 'Multi-step flag challenges that combine several of the categories above into one exploit path'),
     array('Client-side', 'Clickjacking, DOM XSS, prototype pollution, postMessage flaws'),
     array('Advanced', 'HTTP smuggling, deserialization, host header injection, cache poisoning'),
 );
@@ -853,6 +1047,33 @@ is exactly what a real bug bounty triage expects, whether the target is this lab
         <span>
     <strong><?php echo htmlspecialchars($c['title']); ?></strong>
     <span class="small"> — <?php echo htmlspecialchars($c['module']); ?> · target: <code><?php echo $c['target']; ?></code></span>
+        </span>
+    </label>
+    <p><?php echo $c['objective']; ?></p>
+    <p class="small"><strong>Tools:</strong> <?php echo htmlspecialchars(implode(', ', $c['tools'])); ?></p>
+    <ol>
+        <?php foreach ($c['steps'] as $s): ?><li><?php echo $s; ?></li><?php endforeach; ?>
+    </ol>
+    <details>
+        <summary>Reveal clue</summary>
+        <p><?php echo $c['clue']; ?></p>
+    </details>
+    <?php render_feedback_widget($cid, $my_votes); ?>
+</div>
+<?php endforeach; ?>
+
+<h3 style="margin-top:34px;">Capture the Flag <span class="small">(also not gated by difficulty — chain these whenever you're ready)</span></h3>
+<p class="small">Two standalone flag challenges, each chaining more than one bug in this app together rather than
+exercising a single vulnerability class. Both work at every difficulty tier — see each one's clue for why.</p>
+<?php foreach ($ctf_flags as $c):
+    $cid = challenge_slug('ctf', $c['title']);
+?>
+<div class="challenge-card" id="feedback-<?php echo htmlspecialchars($cid); ?>" style="border:1px solid #f59e0b;border-radius:6px;padding:14px 18px;margin-bottom:14px;background:#fffbeb;transition:opacity .2s;">
+    <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+        <input type="checkbox" class="challenge-progress-box" data-challenge-id="<?php echo htmlspecialchars($cid); ?>" style="width:auto;margin-top:4px;">
+        <span>
+    <strong>🚩 <?php echo htmlspecialchars($c['title']); ?></strong>
+    <span class="small"> — <?php echo htmlspecialchars($c['module']); ?> · target: <code><?php echo htmlspecialchars($c['target']); ?></code></span>
         </span>
     </label>
     <p><?php echo $c['objective']; ?></p>
@@ -975,7 +1196,7 @@ they're listed here because they're step one on a real target.</p>
 <tr><td><?php echo $i + 1; ?></td><td><strong><?php echo htmlspecialchars($v[0]); ?></strong></td><td><?php echo htmlspecialchars($v[1]); ?></td></tr>
 <?php endforeach; ?>
 </table>
-<p class="small">This app currently exercises rows 1, 3, 5, 7, and 10 (Injection, Access Control, File Upload, CSRF, API/mass-assignment) — the rest are worth knowing for real targets even though they're not modeled here yet.</p>
+<p class="small">This app currently exercises rows 1, 2 (JWT issues specifically, via the API Token (JWT) Auth module), 3, 5, 7, 10, and 11 (Injection, Broken Auth/JWT, Access Control, File Upload, CSRF, API-specific, CTF-style chains) — the rest are worth knowing for real targets even though they're not modeled here yet.</p>
 
 <h4 style="margin-top:22px;">Phase 4 — Exploitation &amp; Validation</h4>
 <ul>

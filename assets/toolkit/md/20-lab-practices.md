@@ -400,13 +400,60 @@ Difficulty Settings** as each lab specifies. Seeded accounts: `admin/admin123`,
 
 ---
 
-## After Lab 20
+## Bonus Phase — API Token (JWT) & CTF Capstone (Labs 21–22)
+
+These two labs are newer additions, covering the API Token (JWT) Auth and
+API mass-assignment modules added after the original 20-lab sequence above.
+They're placed after the Lab 20 report-writing capstone rather than
+between Labs 19 and 20 specifically so Lab 20's "compile Labs 1–19" scope
+stays accurate — treat this phase as an optional extension once the core
+workflow above feels comfortable, not a prerequisite for it.
+
+### Lab 21: API Security Testing — JWT Auth Flaws
+**Tools:** Burp Suite, curl, a scratch script to base64url-encode JSON (or `python3 -c`)
+**Tier:** simple through expert (test all four)
+**Objective:** Practice forging and abusing JSON Web Tokens against the API Token (JWT) Auth module (`/api/auth_token.php`, `/api/ticket_update.php`).
+
+**Steps:**
+
+1. Set difficulty to **simple**. Hand-craft an unsigned token (header `{"typ":"JWT","alg":"none"}`, payload `{"sub":1,"username":"admin","role":"admin"}`, empty signature segment) and use it as a Bearer token against `/api/ticket_update.php` — confirm it's accepted with zero valid credentials.
+2. Set difficulty to **intermediate**. Confirm the exact lowercase `none` is now blocked, then retry with `alg: "None"` — confirm the case-sensitive filter still misses it.
+3. Set difficulty to **hard**. Get a real token from `/api/auth_token.php`, decode its `exp` claim, and confirm the API still accepts it well past that timestamp — the signature is real, but expiry is never checked.
+4. Set difficulty to **expert**. Confirm an expired token is now rejected — then get a fresh token for your own account, change your own password via `/user/change_password.php`, and confirm the *old* token still works anyway (no revocation on credential change).
+5. Throughout, keep a copy of each forged/captured token in your notes — a real JWT finding's PoC is the token itself plus the request it unlocks.
+
+**Success check:** Documented proof of the alg-confusion bypass (simple+intermediate), the missing-expiry replay (hard), and the missing-revocation replay (expert), each with the exact token and request used.
+
+**Report it:** The simple/intermediate bypasses are **Critical** (full authentication bypass with zero credentials). The hard-tier missing-expiry and expert-tier missing-revocation findings are each their own **Medium-to-High** report — "token lifetime" bugs are a distinct, common finding category in real JWT-based APIs, separate from the forgery itself.
+
+---
+
+### Lab 22: CTF Capstone — Chain the API Flaws for a Flag
+**Tools:** Browser or Burp Suite, curl
+**Tier:** any (this chain works at every tier)
+**Objective:** Walk the "The Forgotten Export" chain end-to-end — from a brand-new, unprivileged login to reading an admin-only ticket containing a flag — using bugs you've already found earlier in this manual.
+
+**Steps:**
+
+1. Log in as any seeded non-admin account (e.g. `bob`) and request `/user/profile_export.php?id=1` — this reuses the same forgotten-endpoint IDOR from Lab 14, now leaking an `api_key` field alongside the profile data.
+2. Exchange that leaked `api_key` (with username `admin`) for a JWT at `/api/auth_token.php` — this is the legitimate exchange path, not a forged token.
+3. Use the resulting token as a Bearer token against `/api/tickets.php?id=3` and recover the flag string in the ticket's message.
+4. Separately, forge a completely unsigned token (`alg: none`, `role: admin`) and send it to `/api/ticket_update.php?admin_note=1` — recover the second flag, independent of the app's configured tier.
+5. Write up both chains as a single finding: the real value of a CTF-style writeup is showing the *chain*, not just the final step.
+
+**Success check:** Both flags recovered, with a documented chain for each showing every step from your starting unprivileged login to the flag.
+
+**Report it:** Write this one as a single **Critical** finding titled something like *"Chained IDOR + Credential Leak + API Auth Allows Full Admin Data Access"* — in a real program, a triager cares far more about a clearly-chained path to high impact than about five separate low-severity tickets for the same underlying root cause.
+
+---
+
+## After Lab 22
 
 You've now run the full workflow this app was built to teach: recon, mapping,
 straightforward exploitation, filter evasion, chained/secondary flaws, logic
-bugs, API testing, and — critically — turning all of it into a report a real
-program would actually accept. From here, the honest next step (per this
-app's own README) is DVWA and PortSwigger's Web Security Academy for the
-vulnerability categories a single custom app can't cover (JWT, GraphQL, HTTP
-smuggling, and more) — you now have the workflow habits to get real value out
-of them faster.
+bugs, API testing, JWT auth flaws, and — critically — turning all of it into
+a report a real program would actually accept. From here, the honest next
+step (per this app's own README) is DVWA and PortSwigger's Web Security
+Academy for the vulnerability categories a single custom app still can't
+cover (GraphQL, HTTP smuggling, XXE, SSTI, and more) — you now have the
+workflow habits to get real value out of them faster.

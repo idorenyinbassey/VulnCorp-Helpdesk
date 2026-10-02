@@ -24,10 +24,11 @@ apps are fixed-difficulty.
 
 It's meant as a **guided on-ramp that comes *before* DVWA and
 PortSwigger**, not a replacement for them — once a student is
-comfortable here, those tools cover far more ground (JWT, GraphQL,
-HTTP smuggling, and other categories this single custom app
-structurally can't demonstrate) and have years of community
-calibration behind them that this app doesn't have yet. The
+comfortable here, those tools cover far more ground (GraphQL, HTTP
+smuggling, XXE, SSTI, and other categories this single custom app
+structurally can't demonstrate — JWT auth flaws are now modeled here too,
+see section 6) and have years of community calibration behind them that
+this app doesn't have yet. The
 beginner-feedback tools (`/feedback/`) exist specifically to start
 building that calibration from real student data instead of one
 person's best guess at what a beginner needs.
@@ -57,10 +58,11 @@ person's best guess at what a beginner needs.
 
 > Setting up a separate VM instead of using Metasploitable2? See
 > section 2 below — `setup-modern.sh` is a one-command native install
-> for a modern Ubuntu VM (no Docker needed), or use
-> [`docker/README.md`](docker/README.md) if you already have Docker
-> running somewhere. Same app, same 39 challenges either way — only
-> the deployment mechanics differ from what's below, which is
+> for a modern Debian/Ubuntu VM, `setup-rhel.sh` does the same for the
+> RHEL/Fedora family, or use [`docker/README.md`](docker/README.md) if
+> you already have Docker running somewhere. Same app, same 51
+> challenges (44 tiered, 5 recon-phase, 2 CTF flag chains) either way —
+> only the deployment mechanics differ from what's below, which is
 > Metasploitable2-specific.
 
 **Prerequisites:** Metasploitable2 running in VirtualBox/VMware on a
@@ -225,7 +227,35 @@ isn't from the literal Linux `root` user, which is exactly what the
 web server's PHP process is not (`Access denied for user
 'root'@'localhost'`). `setup-modern.sh` fixes all three.
 
-### Option B: Docker, if you already use it elsewhere
+### Option C: native install with `setup-rhel.sh` (RHEL/Fedora family)
+
+Same idea as Option A, for RHEL, CentOS Stream, Rocky Linux, AlmaLinux,
+or Fedora instead of Debian/Ubuntu:
+```bash
+git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
+cd VulnCorp-Helpdesk
+sudo bash setup-rhel.sh
+```
+This installs `httpd`/PHP/MariaDB via `dnf` (falling back to `yum` if
+`dnf` isn't present) if they're not already there, fixes the same
+MariaDB `auth_socket` issue `setup-modern.sh` fixes, deploys to the same
+`/var/www/html/vulnapp` docroot — but owned by the `apache` user, not
+Debian's `www-data` — and, unlike `setup-modern.sh`, also handles two
+things that are specific to this distro family and otherwise block the
+app outright:
+- **SELinux** — if `getenforce` reports `Enforcing` or `Permissive`
+  (skipped entirely if SELinux isn't present at all), the script sets the
+  `httpd_sys_rw_content_t` context on `uploads/` and runs `restorecon` —
+  without this, Apache can have the right Unix file permissions and
+  still get denied when the upload module tries to write a file.
+- **firewalld** — on by default on RHEL/Fedora (unlike most Debian cloud
+  images), so the script opens the `http` service if firewalld is
+  running; otherwise the app is unreachable from outside the box even
+  though Apache itself is serving it correctly.
+
+Verify the same way as Option A: `curl -I http://<this-vm-ip>/vulnapp/`.
+
+### Option D: Docker, if you already use it elsewhere
 
 See [`docker/README.md`](docker/README.md) for the full walkthrough.
 Same idea as above (own VM, same isolated network, static IP) except
@@ -236,9 +266,14 @@ git clone https://github.com/idorenyinbassey/VulnCorp-Helpdesk.git
 cd VulnCorp-Helpdesk/docker
 sudo docker compose up -d
 ```
-and the app lands on port 8080 instead of 80.
+and the app lands on port 8080 instead of 80. This option is the most
+distro-agnostic of the four — since every OS-specific detail (package
+names, init system, docroot, SELinux) lives inside the official
+container images rather than the host, it works identically on literally
+any Linux box with a working Docker install, not just Debian/Ubuntu or
+RHEL/Fedora.
 
-Either option gives the same clean three-VM lab — Kali (attacker),
+Any of these options gives the same clean three-VM lab — Kali (attacker),
 Metasploitable2 (the old-school multi-service target), and this VM
 (VulnCorp Helpdesk) — independent of each other, nothing shared, each
 reachable from Kali for whichever exercise needs it.
@@ -252,6 +287,11 @@ reachable from Kali for whichever exercise needs it.
 | alice    | alice123    | user    |
 | bob      | bob123      | user    |
 
+Each seeded account also has an `api_key` in the `users` table, used by
+the API Token (JWT) Auth module (see section 6) — it's not shown in any
+UI by design; the "The Forgotten Export" CTF chain is about leaking one
+via an existing IDOR, not reading it off this table.
+
 **Managing accounts:** passwords can be changed at `/user/change_password.php`
 (link on the dashboard), and admins can create new accounts at
 `/admin/create_user.php`. Both are deliberately weak below the expert
@@ -260,8 +300,11 @@ self-registration; account creation is admin-only by design.
 
 **Other reachable features** (also on the dashboard, also weak below
 expert): a one-time "welcome bonus" claim at `/user/claim_bonus.php`
-(race condition), and a small JSON API at `/api/tickets.php` (broken
-object-level authorization) — good for practicing with Postman/Burp
+(race condition), a small JSON API at `/api/tickets.php` (broken
+object-level authorization), an API token exchange at
+`/api/auth_token.php` and a JSON write endpoint at
+`/api/ticket_update.php` (JWT auth flaws and API-specific mass
+assignment — see section 6) — all good for practicing with Postman/Burp
 against something that isn't an HTML form.
 
 ## 4. Setting the difficulty
@@ -286,9 +329,14 @@ good for live-demoing "watch the same payload stop working."
 | **Login redirect** (`index.php?redirect=`) | No validation at all → raw open redirect to any external URL | Requires a leading `/` → bypassed by protocol-relative `//evil.com` | Blocks protocol-relative, but "contains the app name anywhere" is a substring check → `http://evil.com/vulnapp` passes | Fixed allowlist of real in-app paths only — closed |
 | **Welcome bonus** (`user/claim_bonus.php`) | Classic TOCTOU (check-then-write, two statements) with a wide 400ms artificial window → reliably double-claimable with a handful of concurrent requests | Same TOCTOU, narrower 50ms window → still exploitable, but needs real concurrent tooling (async script or Burp Intruder concurrent mode), not naive sequential `curl` loops | Single atomic `UPDATE ... WHERE bonus_claimed = 0` checked via `mysqli_affected_rows()` — closed | Same atomic fix as hard — closed |
 | **Tickets API** (`api/tickets.php`, JSON) | No authentication at all — anyone can read any ticket or list all of them | Requires login, but no ownership check — any valid session reads any ticket | Single-ticket lookup (`?id=`) is properly scoped; **list mode** (no `id`) was added later and never got the same check → still leaks every ticket | Both single-ticket and list mode properly scoped to the caller — closed |
+| **API Token (JWT) Auth** (`api/auth_token.php`, `includes/jwt.php`, Bearer header) | `alg: none` in the JWT header skips signature verification entirely → forge any claims | Blocks the literal lowercase `none` only → bypass with `None`/`NONE` | Alg confusion fully closed, signature required — but `exp` is never checked → a captured token is valid forever | `exp` checked too — but no revocation on password change → a token issued before a password change keeps working after it |
+| **API Token Request rate limiting** (`api/auth_token.php`) | No rate limiting at all → brute-force the `api_key` freely | *(inherits hard-tier behavior below)* | Lockout exists, but keyed by a case-sensitive username and a spoofable `X-Forwarded-For` → both independently bypass it | *(inherits hard-tier behavior — this module's own challenges are simple/hard only)* |
+| **API Ticket Update — Mass Assignment** (`api/ticket_update.php`, Bearer header) | No field allowlist and no ownership check at all → any caller rewrites any ticket's owner and priority | Ownership checked against the ticket's *current* owner — but a new `user_id` in the same request still reassigns it right after | `user_id` finally stripped — but the admin/support-only `priority` field was forgotten and stays open to any caller | Both fields correctly allowlisted — but the check reads `$_POST` while the write loop reads `$_REQUEST` → the same field via the query string slips through |
 
 `user/profile_export.php` is a good standalone target at every
-tier since its missing ownership check doesn't depend on the toggle.
+tier since its missing ownership check doesn't depend on the toggle —
+and, since it now also exports each user's `api_key`, it's the entry
+point for the "The Forgotten Export" CTF chain (see section 6).
 The welcome-bonus race condition needed real verification, not just
 code review — see the "Notes" section below for what that took.
 
@@ -308,12 +356,12 @@ it's easy to add your own challenges as you extend the app.
 The concept blocks exist specifically for beginners: knowing that
 `' -- ` bypasses a login form isn't the same as understanding *why* —
 that the query is built by string concatenation, what a quote does to
-that string, what a comment operator removes. Each of the 26 tiered
-challenges has one; the recon and tools-reference sections don't,
-since those are about methodology/tool usage rather than a specific
-vulnerability mechanism.
+that string, what a comment operator removes. Each of the 44 tiered
+challenges has one; the recon, CTF-flag, and tools-reference sections
+don't, since those are about methodology/tool usage or multi-step chains
+rather than a single specific vulnerability mechanism.
 
-**Difficulty badges and staged hints.** Each of the 26 tiered
+**Difficulty badges and staged hints.** Each of the 44 tiered
 challenges is also rated **Entry / Standard / Stretch** (a genuine
 audit of relative cognitive load within its tier, not just its
 position in the array) and displayed sorted by that rating — Entry
@@ -334,10 +382,11 @@ vulnerability to nudge toward.
 
 A short version of what's covered (full detail is on the page itself):
 
-- **Simple** — auth bypass, UNION-based dumping with sqlmap, stored XSS, basic IDOR, raw command injection, unrestricted upload.
-- **Intermediate** — the same bug classes behind naive filters (case-sensitive blacklists, client-controlled Content-Type checks) — the skill here is filter evasion, not new bug-finding.
-- **Hard** — main paths are fixed; the challenges point at the secondary flaw a real reviewer would have to hunt for (a forgotten endpoint, a second unescaped parameter, a polyglot file).
-- **Expert** — mostly closed; challenges lean on source review, brute force against a missing rate limit, and a CSRF PoC exercise (build the PoC against hard mode, then confirm the same PoC fails once the CSRF token lands in expert mode — a good exercise in writing an accurate bug report).
+- **Simple** — auth bypass, UNION-based dumping with sqlmap, stored XSS, basic IDOR, raw command injection, unrestricted upload, a hand-forged `alg: none` JWT, unrestricted API mass assignment, and a brute-forceable API token exchange.
+- **Intermediate** — the same bug classes behind naive filters (case-sensitive blacklists, client-controlled Content-Type checks, case-sensitive `alg` filtering) — the skill here is filter evasion, not new bug-finding.
+- **Hard** — main paths are fixed; the challenges point at the secondary flaw a real reviewer would have to hunt for (a forgotten endpoint, a second unescaped parameter, a polyglot file, a JWT with no expiry check, an API field nobody staff-gated, a rate limit with two independent bypasses).
+- **Expert** — mostly closed; challenges lean on source review, brute force against a missing rate limit, a CSRF PoC exercise, a JWT with no revocation on password change, and a `$_POST`-vs-`$_REQUEST` mismatch on the API mass-assignment endpoint (build the PoC against hard mode, then confirm the same PoC fails once the matching fix lands in expert mode — a good exercise in writing an accurate bug report).
+- **CTF flags (not tier-gated)** — two standalone chains that combine several bugs above into one exploit path: an IDOR-leaked API key exchanged for a forged admin session, and a hidden always-vulnerable `alg: none` branch independent of the configured tier.
 
 The **CSRF challenge** is the one place the page hands you a code
 snippet — a minimal auto-submitting HTML form pointed at the app's
@@ -345,6 +394,22 @@ own ticket-status endpoint. That's the standard, non-weaponized PoC
 format used in real CSRF bug reports (it only works against a
 target you're already authorized to test, and does nothing on its
 own without a logged-in victim visiting it).
+
+**API Token (JWT) Auth module.** `/api/auth_token.php` exchanges a
+user's `api_key` (seeded per account — see the credentials table above)
+for a hand-rolled HS256 JSON Web Token, used as a `Bearer` token against
+`/api/tickets.php` and the new `/api/ticket_update.php`. The signing
+secret is generated randomly per install (`settings.jwt_secret` in
+`db_setup.sql`, via `MD5(RAND())`) — it is never a fixed value anywhere
+in the source, so every bug in this module is a verification-logic flaw
+(algorithm confusion, a missing expiry check, no revocation on password
+change), never a guessable secret. See `includes/jwt.php`.
+
+**API Ticket Update — Mass Assignment module.** `/api/ticket_update.php`
+is a JSON write endpoint, authenticated the same way, that deliberately
+writes whatever fields a request supplies instead of enforcing a fixed,
+role-aware allowlist — the API-specific counterpart to the browser-form
+mass assignment in `user/profile.php`.
 
 ## 7. Deployment path handling
 
@@ -415,6 +480,19 @@ other. The Toolkit page's `$templates` array supports a per-template
 document like this one doesn't need spreadsheet formats it has no use
 for — see `toolkit/index.php` if you add another document-shaped
 template later.
+
+> **Known drift, flagged rather than hidden:** the Labs 21–22 addition
+> to `20-lab-practices.md` was regenerated into `.docx` with `pandoc`,
+> but `assets/toolkit/doc/20-lab-practices.doc` and
+> `assets/toolkit/pdf/20-lab-practices.pdf` are currently **stale**
+> (pre-Lab-21/22 content) — `pandoc` doesn't emit legacy `.doc` at all,
+> and the LibreOffice (`soffice --headless --convert-to`) fallback used
+> to produce `.doc`/`.pdf` from the `.docx` consistently failed to load
+> *any* source file in the sandbox this was built in (reproduced even
+> against an untouched, pre-existing template), so regenerating those
+> two formats needs a working LibreOffice/pandoc-PDF-engine environment
+> this one didn't have. `.md` and `.docx` are both current; re-run the
+> `.doc`/`.pdf` conversion from `.docx` once you have that tooling.
 
 ## 10. Beginner-feedback tools
 
@@ -512,6 +590,17 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
   alone would have been a false negative. The timing windows (400ms
   simple / 50ms intermediate) were tuned empirically against that real
   setup, not guessed.
+- **The JWT signing secret (`settings.jwt_secret`) is generated randomly
+  per install** (`MD5(RAND())` in `db_setup.sql`), never a fixed value in
+  any source file. This app is open source, so a hardcoded secret
+  would make every JWT challenge trivial by just reading the repo
+  instead of exploiting a real verification-logic bug — every JWT bug
+  here (algorithm confusion, missing expiry, no revocation) is meant to
+  be exploitable without ever knowing the secret at all.
+- The `activity_log` table doubles as the rate-limit counter for
+  `api/auth_token.php` (`action = 'api_token_fail'` rows within a
+  rolling 5-minute window) rather than a dedicated table — reuse an
+  existing table before adding a new one if the data genuinely fits.
 
 ## 14. Building on this later
 
@@ -525,21 +614,32 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
 - New vulnerable modules should get a `'difficulty'` rating
   (`Entry`/`Standard`/`Stretch`) and a two-part `'hints'` array
   (`nudge`/`answer`) in `challenges/index.php`, matching the existing
-  26+8 entries, so they sort correctly and fit the site's format. If
-  you want vote data on it too, give it the same `challenge_slug()`-
+  44 tiered entries, so they sort correctly and fit the site's format.
+  If you want vote data on it too, give it the same `challenge_slug()`-
   based `id` and the `render_feedback_widget()` call already used by
-  every other card — nothing else to wire up.
+  every other card — nothing else to wire up. A standalone, non-tiered
+  challenge (a CTF flag chain, like the two in `$ctf_flags`, or a recon
+  step, like the five in `$recon`) uses the narrower `title`/`module`/
+  `target`/`objective`/`tools`/`steps`/`clue` shape instead — no
+  `difficulty`, `concept`, or `hints`.
 - If a new module depends on real concurrency (a race condition, a
   timing attack), test it against actual Apache/PHP-FPM, not just
   `php -S` — see the note above.
-- `setup.sh` (Metasploitable2) and `setup-modern.sh` (modern Ubuntu/
-  Debian) are separate scripts on purpose, not one script branching on
-  OS detection — they target genuinely different environments
+- If a new module needs a server-side secret (the JWT module's
+  `jwt_secret` is the current example), generate it randomly per
+  install in `db_setup.sql` rather than hardcoding it anywhere in the
+  PHP source — see the note above on why.
+- `setup.sh` (Metasploitable2), `setup-modern.sh` (modern Debian/
+  Ubuntu), and `setup-rhel.sh` (RHEL/Fedora family) are separate
+  scripts on purpose, not one script branching on OS detection — they
+  target genuinely different environments
   (`/etc/init.d` vs. `systemctl`, `/var/www` vs. `/var/www/html` as
   `DocumentRoot`, MySQL 5.0's open-by-default root vs. modern
-  MariaDB's `auth_socket`). If you change deployment behavior in one,
-  check whether the other needs the equivalent change too — don't
-  assume fixing one automatically fixes the other, since that
+  MariaDB's `auth_socket`, `apt`/`www-data`/no-SELinux vs.
+  `dnf`-or-`yum`/`apache`/SELinux-and-firewalld). If you change
+  deployment behavior in one, check whether the others need the
+  equivalent change too — don't assume fixing one automatically fixes
+  the others, since that
   assumption is exactly what broke `setup.sh` when it was first run
   against a modern machine (three separate real bugs, found by
   actually running it, not by inspection).
