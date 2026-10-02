@@ -8,7 +8,13 @@ require_login();
 // -> Broken Access Control / IDOR, present at ALL difficulty tiers via this file.
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (int)$_SESSION['user_id'];
 
-$res = mysqli_query($conn, "SELECT id, username, role, full_name, email, created_at FROM users WHERE id = " . $id);
+// api_key was added here for the "The Forgotten Export" CTF chain - this
+// export endpoint already had no ownership check at any difficulty tier
+// (see the comment above), so including the API Token (JWT) Auth
+// module's credential in its output turns that pre-existing IDOR into a
+// full account-takeover chain: leak another user's api_key here, then
+// exchange it at /api/auth_token.php for a JWT that authenticates as them.
+$res = mysqli_query($conn, "SELECT id, username, role, full_name, email, api_key, created_at FROM users WHERE id = " . $id);
 $profile = $res ? mysqli_fetch_assoc($res) : null;
 
 header('Content-Type: application/json');
