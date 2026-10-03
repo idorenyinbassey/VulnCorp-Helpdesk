@@ -10,7 +10,9 @@ not just exploiting bugs, you're practicing the full bounty-hunter workflow.
 **Before Lab 1:** confirm the app is deployed and reachable (`README.md`
 section 1 or 2), and you know its IP/URL. Set difficulty via **Admin Panel →
 Difficulty Settings** as each lab specifies. Seeded accounts: `admin/admin123`,
-`sam/support123` (support), `alice/alice123`, `bob/bob123` (both `user`).
+`sam/support123` (support), `alice/alice123`, `bob/bob123` (all four log in
+in a single step), and `carol/carol123` — the one account with 2FA enabled,
+needed for Lab 29 specifically.
 
 ---
 
@@ -447,13 +449,190 @@ workflow above feels comfortable, not a prerequisite for it.
 
 ---
 
-## After Lab 22
+## Bonus Phase — Session & Client-Side Security (Labs 23–26)
+
+These four labs are newer additions, covering the session-fixation,
+clickjacking, cache-poisoning, and DOM XSS modules added after the
+original 20-lab sequence and the Labs 21–22 bonus phase above. All four
+live in features that either never send anything to the server at all
+(Lab 26) or depend on response headers and session handling rather than
+payload-style input (Labs 23–25) — a different muscle than the earlier
+injection-style labs. Run this phase in either order relative to the
+next one; neither depends on the other.
+
+### Lab 23: Session Fixation — Riding In on a Known Session ID
+**Tools:** Browser DevTools (to read and set cookies manually), two browser
+profiles (or one browser plus curl, to act as "attacker" and "victim"
+separately)
+**Tier:** simple through hard
+**Objective:** Get authenticated as another user by planting a session ID
+*before* they log in, rather than stealing anything after the fact.
+
+**Steps:**
+
+1. Set difficulty to **simple**. As the "attacker," visit the login page without logging in and note the session cookie's value — this is a real, valid (if anonymous) session ID the server already issued you.
+2. In a second browser profile ("victim"), manually set that exact same session cookie value, then log in normally as `alice`.
+3. Back in the attacker's original browser/profile (same session ID, never logged in there yourself), reload `/dashboard.php` — confirm you're now looking at `alice`'s authenticated session, despite never entering her password.
+4. Switch to **hard** tier and repeat steps 1–3 against the main login form — confirm the session ID now rotates the moment login succeeds, so the pre-planted ID from step 1 is worthless after step 2.
+5. Still on **hard** tier, target the *other* login path instead: have the victim log in with "Remember me" checked (issuing a `remember_token` cookie), then simulate the victim's browser restarting by clearing only the session cookie (not `remember_token`) and revisiting the app. Note the fresh session ID the remember-me auto-login issues you — then reason about whether an attacker who pre-planted *that* ID before this auto-login fired would have won the same way as step 3.
+
+**Success check:** Full access to `alice`'s session via a pre-planted ID at simple/intermediate tier; confirmation that the *main* login path closes this at hard/expert, while the remember-me auto-login path still never rotates the ID at any tier.
+
+**Report it:** **High** at simple/intermediate. Title: *"Session Fixation in Login Flow Allows Pre-Authentication Session Hijacking."* Note explicitly that this is distinct from session *theft*: the attacker never needs to see a cookie value the victim generated, only to supply one of their own in advance. At hard tier, note the finding more narrowly as *"Session Fixation Persists via 'Remember Me' Auto-Login Path"* — a fix applied to the obvious code path (password login) but not a second path reaching the identical privilege change.
+
+---
+
+### Lab 24: Clickjacking — Framing the 2FA Toggle
+**Tools:** A local scratch HTML file with an `<iframe>`
+**Tier:** hard and expert
+**Objective:** Load a page from this app inside an attacker-controlled frame, and find the one page that's still frameable even once the rest of the app isn't.
+
+**Steps:**
+
+1. Build a minimal local HTML file: `<iframe src="http://<target>/vulnapp/dashboard.php" width="800" height="600"></iframe>`. Set difficulty to **hard**, log in as any user in the same browser, then open your local file — confirm the iframe refuses to render the page.
+2. Log in as `carol` specifically (the 2FA-enabled account) and let the login flow redirect you to `/user/verify_2fa.php`. Change your iframe's `src` to that exact URL instead, reload your local file, and confirm — unlike the dashboard — it loads without restriction.
+3. Extend your scratch page into a minimal clickjacking PoC: position the iframe so the real page's content sits underneath, then overlay a decoy element (e.g. a styled `<button>`) directly on top of where the real page's actionable control sits, using absolute positioning and a transparent (or near-transparent) iframe.
+4. Switch difficulty to **expert** and reload the exact same framing page (still pointed at `/user/verify_2fa.php`). Confirm it now refuses to render, same as the dashboard did in step 1.
+
+**Success check:** `/user/verify_2fa.php` loads inside your iframe at hard tier and is blocked at expert tier, with a working overlay-alignment demo from step 3.
+
+**Report it:** **Medium**, upgradable to **High** if paired with a believable pretext. Title: *"Clickjacking on Standalone 2FA Verification Page via Missing X-Frame-Options."* Note in your report that this is the same root cause as the Lab 14/19 "forgotten endpoint" pattern — a protection applied to the shared page template, with one standalone page built outside it and never re-checked individually.
+
+---
+
+### Lab 25: Cache Poisoning — Poisoning the Login Page for Everyone
+**Tools:** curl, run as two genuinely separate requests ("attacker" and "victim")
+**Tier:** simple through expert
+**Objective:** Make the login page serve YOUR injected content to a completely different, later visitor who never sent anything unusual at all.
+
+**Steps:**
+
+1. Set difficulty to **simple**. Request `/index.php` normally with curl and view the page source — note the `<link rel="canonical">` tag's value.
+2. As the "attacker," resend the exact same request, this time adding a header: `curl -H "X-Forwarded-Host: evil.example" http://<target>/vulnapp/`. Confirm the canonical link now contains `evil.example`.
+3. As the "victim," send a completely clean request to that exact same URL — no special headers at all: `curl http://<target>/vulnapp/`. Confirm the victim's response *still* shows `evil.example` — this is the actual poisoning: your one crafted request changed what a different, later, header-free request receives.
+4. Switch to **intermediate**. Repeat steps 2–3, but add a cache-busting query parameter to both requests (e.g. `?cb=1`) to force a fresh cache entry for this specific test — confirm the same poisoning still works once you know to bust the cache per test.
+5. Switch to **hard**. Confirm the injected value is now HTML-escaped in the page source (no raw markup breakout) — but note it's still used, unescaped as a *destination*, in the canonical link's actual URL, making this an open-redirect-flavored poisoning instead.
+6. Switch to **expert**. Confirm `X-Forwarded-Host` no longer affects the canonical link at all — then repeat the same attacker/victim pattern from steps 2–3 using `Accept-Language` instead, targeting the page's "Preferred language" banner. Confirm that *second*, unrelated header is still poisoning the same cached page.
+
+**Success check:** A documented attacker request + a separate, clean victim request to the identical URL, with the victim's response showing the attacker's injected value, at every tier through to expert's residual `Accept-Language` gap.
+
+**Report it:** **High** at simple/intermediate/hard. Title: *"Cache Poisoning via Unkeyed X-Forwarded-Host Header."* The key point for your write-up: a cache that doesn't vary by a header it reflects turns a single malicious request into an attack on every subsequent visitor, not just the attacker's own session. At expert, a **Low-Medium** follow-on finding on the `Accept-Language` gap — same root cause, lower-impact banner, worth reporting as a second instance of the same unfixed pattern.
+
+---
+
+### Lab 26: DOM XSS — The Search Deep Link That Never Touches the Server
+**Tools:** Browser address bar only — no Burp, no server-side requests of any kind
+**Tier:** simple through expert
+**Objective:** Get JavaScript to execute from a URL fragment that the server never even sees, and understand why none of this app's server-side XSS protections apply to it at all.
+
+**Steps:**
+
+1. Set difficulty to **simple**. Log in as any user, navigate to `/user/tickets.php`, then edit the URL to append `#q=<script>alert(1)</script>` and reload. Confirm the alert fires, then open DevTools' Network tab, repeat the reload, and confirm this exact payload never appears in any outgoing request — the fragment (`#...`) is a browser-only construct, never transmitted to the server.
+2. Switch to **intermediate**. Confirm the same `#q=<script>...` payload is now neutralized. Without using the word "script" anywhere, construct a payload using a different tag's event-handler attribute instead (e.g. `#q=<img src=x onerror=alert(1)>`) and confirm it fires.
+3. Switch to **hard**. Confirm your step-2 payload no longer works (a naive allowlist now strips most tags). Construct an `<a href>` tag that includes a legitimate `href` attribute *and* a separate event-handler attribute on the same tag, and confirm the whole tag — handler included — survives the filter.
+4. Switch to **expert**. Confirm every payload you've built in this lab so far now renders as inert, literal text instead of executing.
+
+**Success check:** Confirmed execution at simple/intermediate/hard via three different payload shapes, each demonstrated to never appear in any server-bound request, and confirmed closure at expert.
+
+**Report it:** **Medium-High** at simple through hard. Title: *"DOM-Based XSS via Unsanitized URL Fragment in Search Deep Link."* The single most important line in this report is explaining *why* this is a distinct finding from the Lab 7/11 server-side stored XSS, even though the payloads look similar: there is no server-side fix that touches this bug at all, since the vulnerable code path (reading `location.hash`, writing via `innerHTML`) runs entirely in the victim's own browser.
+
+---
+
+## Bonus Phase — Server-Side Request, XML & Workflow Flaws (Labs 27–30)
+
+These four labs cover the SSRF, XXE, 2FA bypass, and expanded business-logic
+modules added alongside the previous bonus phase. Unlike that phase, these
+all involve server-side request handling or multi-step state, so expect
+each lab to take a bit longer per tier.
+
+### Lab 27: SSRF — Abusing the Ticket Link Preview
+**Tools:** curl or Burp Suite; for the expert-tier step, a server you control that can respond with an HTTP redirect (a free redirect-hosting service, or a one-line script on any machine you control, works fine)
+**Tier:** simple through expert
+**Objective:** Get the server itself to fetch a resource it was never supposed to reach, via a "paste a URL, get a preview" feature on ticket composition.
+
+**Steps:**
+
+1. Set difficulty to **simple**. Log in, open ticket composition, and submit `file:///etc/passwd` (or an app file like `includes/db.php`) as the link to preview. Confirm the file's contents come back in the preview.
+2. Switch to **intermediate**. Confirm `file://` URLs are now rejected, and confirm a direct `http://127.0.0.1/` or `http://localhost/` is also blocked. Instead, submit `http://127.1/` (or octal `http://0177.0.0.1/`) and confirm the preview still reaches loopback — same address, different spelling, outside the blacklist's exact string matches.
+3. Switch to **hard**. Confirm both `127.1` and `0177.0.0.1` are now correctly blocked. Instead, host a URL that responds with an HTTP redirect (3xx) to `http://127.0.0.1/` somewhere, and submit *that* URL to the preview feature — confirm the preview follows the redirect and reaches the internal address anyway, since only the original, externally-hosted URL was validated.
+4. Switch to **expert**. Confirm the same redirect trick from step 3 no longer works. Instead, submit `http://169.254.169.254/` directly and confirm it's still fetched successfully — this address is never included in the private-range blocklist, the single most common real-world gap in exactly this kind of hand-rolled check.
+
+**Success check:** Confirmed internal/local-file access at all four tiers via four distinct techniques, with the expert-tier `169.254.169.254` result documented even though nothing meaningful is actually listening there in this lab environment — the point is proving the address is *reachable*, which on a real cloud deployment is exactly how SSRF escalates to credential theft.
+
+**Report it:** **Critical** at simple (arbitrary local file read via `file://`), **High** at intermediate/hard (internal network access via blacklist/redirect bypass), **Medium** at expert (missing cloud-metadata range).
+
+---
+
+### Lab 28: XXE — Bulk Ticket Import
+**Tools:** Burp Suite or curl, a scratch XML file
+**Tier:** simple and intermediate (conceptual beyond that — see step 4)
+**Objective:** Get the server's XML parser to read a local file via a crafted `<!DOCTYPE>`, then recognize why a "fix" that merely changes parser APIs can still be fully exploitable.
+
+**Steps:**
+
+1. Set difficulty to **simple**. As `admin`, open Bulk Import Tickets and submit:
+   ```xml
+   <?xml version="1.0"?>
+   <!DOCTYPE tickets [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+   <tickets><ticket><subject>test</subject><message>&xxe;</message></ticket></tickets>
+   ```
+   Confirm the imported ticket's message contains the file's contents.
+2. Switch to **intermediate**. Resend the *exact same* payload unchanged. Confirm it still works — the fix switched to `DOMDocument` with `LIBXML_NOENT`, a flag that sounds protective but actually means "substitute entity references," the opposite of blocking them.
+3. Switch to **hard**. Resend the same payload again and confirm it now fails outright (any `<!DOCTYPE` is rejected before parsing) — this is the actual fix, not the intermediate tier's parser swap.
+4. Without running anything live: read the Bulk Import Tickets challenge write-up and README's description of (a) blind/out-of-band XXE via a parameter entity referencing an attacker-hosted external DTD, and (b) entity-expansion ("billion laughs") denial of service. Write one paragraph on each, as if explaining the risk to a developer who fixed the DOCTYPE-rejection bug and now believes XXE is fully closed.
+
+**Success check:** Confirmed working exfiltration at simple AND intermediate tier with the identical payload (proving the "fix" didn't fix anything), confirmed rejection at hard tier, and two written paragraphs for step 4.
+
+**Report it:** **Critical** for simple/intermediate — and make the intermediate-tier report explicit that it's the *same* vulnerable condition as simple, just reached through code that looks different. Title: *"LIBXML_NOENT Misconception Leaves XXE Fully Exploitable Despite Parser Change."*
+
+---
+
+### Lab 29: 2FA Bypass — Breaking TOTP Step-Up Auth
+**Tools:** Browser or curl; a TOTP code generator for carol's seeded secret `JBSWY3DPEHPK3PXP` — `oathtool --totp -b JBSWY3DPEHPK3PXP` on the CLI, or enter that secret manually into any standard authenticator app
+**Tier:** simple through expert, `carol`'s account only
+**Objective:** Confirm the second factor genuinely works when followed correctly, then find four separate ways around it.
+
+**Steps:**
+
+1. Set difficulty to **hard** (any tier where codes are actually checked works for this baseline step). Log in as `carol`, generate a real code with `oathtool --totp -b JBSWY3DPEHPK3PXP`, submit it, and confirm you land on the dashboard normally — establishing the control is real before trying to bypass it.
+2. Switch to **simple**. Log in as `carol` again and this time, *without* submitting any code at all, browse directly to `/dashboard.php`. Confirm full access anyway.
+3. Switch to **intermediate**. Confirm `/dashboard.php` now correctly bounces an unverified session back to the code prompt. Instead, with that same still-unverified session, request `/api/tickets.php` directly — confirm it returns ticket data anyway.
+4. Switch to **hard**. Confirm that API gap is now closed. Instead, submit a long sequence of incorrect 6-digit codes at the code prompt in a tight loop and confirm none of them trigger any lockout or delay at all.
+5. Switch to **expert**. Confirm repeated bad guesses now correctly rate-limit. Log in once, enter a real code, and check "Trust this device" — note the resulting cookie's name and value. Clear your session (but not that cookie), and reason about how that cookie's value relates to carol's username alone — then explain why that makes it forgeable for any account without ever producing a valid code.
+
+**Success check:** Documented proof of all four tiered bugs — decorative verification (simple), a forgotten endpoint (intermediate), no rate limiting (hard), and a weak/forgeable trusted-device token (expert) — plus the working baseline from step 1 proving the control isn't a prop.
+
+**Report it:** Simple is **Critical** (*"Second Factor Never Actually Enforced Before Granting Full Session"*). Intermediate is **High** (*"Partial-Auth Session Bypasses 2FA on Unmigrated API Endpoint"*). Hard is **Medium-High**, same absence-of-control category as the login-brute-force findings earlier in this manual. Expert is **High** (*"Forgeable 'Trust This Device' Cookie Permanently Bypasses 2FA"*).
+
+---
+
+### Lab 30: Business Logic — Breaking the Escalation Approval Workflow
+**Tools:** Browser, Burp Suite (to send a request a UI control wouldn't normally allow)
+**Tier:** simple through expert
+**Objective:** A regular user can request their ticket be escalated to Urgent; only staff should be able to approve that. Find every tier's gap in that approval gate.
+
+**Steps:**
+
+1. Set difficulty to **simple**. Log in as a regular user (`alice` or `bob`), submit a ticket, and click "Request Urgent" on it. Confirm the priority jumps to `urgent` immediately — no approval step exists at all despite the UI implying one.
+2. Switch to **intermediate**. Click the button once and confirm it visually disables afterward — then use Burp to resend the exact same POST request directly. Confirm the escalation still applies immediately regardless of the disabled button.
+3. Switch to **hard**. Confirm a genuine server-side pending state now exists and the request step correctly enforces it. Staying logged in as the same non-staff requester, locate the staff approval endpoint the Support Queue UI posts to, and `POST` to it yourself. Confirm you can approve (or deny) your own pending request, despite never being `support` or `admin`.
+4. Switch to **expert**. Confirm that self-approval gap is now closed. Instead, get a staff account (`sam`) to deny your request, then immediately resubmit the identical escalation request on the same ticket, repeatedly, in quick succession. Confirm there's no cooldown or cap at all on how many times you can re-request after a denial.
+
+**Success check:** Confirmed instant unauthorized escalation at simple/intermediate (two different mechanisms), confirmed unauthorized self-approval at hard, and confirmed unlimited re-request flooding at expert.
+
+**Report it:** Simple/intermediate are each their own **High** finding — note explicitly for intermediate that *"client-side state visually implying an approval step is not the same as a server-side approval step existing."* Hard is **Critical** (*"Missing Role Check on Escalation-Approval Endpoint Allows Self-Approval"*). Expert is **Low-Medium**, same absence-of-a-limit category as this manual's other "missing control, not a broken one" findings.
+
+---
+
+## After Lab 30
 
 You've now run the full workflow this app was built to teach: recon, mapping,
 straightforward exploitation, filter evasion, chained/secondary flaws, logic
-bugs, API testing, JWT auth flaws, and — critically — turning all of it into
-a report a real program would actually accept. From here, the honest next
-step (per this app's own README) is DVWA and PortSwigger's Web Security
-Academy for the vulnerability categories a single custom app still can't
-cover (GraphQL, HTTP smuggling, XXE, SSTI, and more) — you now have the
+bugs, API testing, JWT auth flaws, session/client-side security, server-side
+request forgery, XML parsing flaws, step-up authentication bypasses, a full
+business-logic workflow — and, critically, turning all of it into a report a
+real program would actually accept. From here, the honest next step (per
+this app's own README) is DVWA and PortSwigger's Web Security Academy for
+the vulnerability categories a single custom app still can't cover (GraphQL,
+HTTP smuggling, SSTI, prototype pollution, and more) — you now have the
 workflow habits to get real value out of them faster.
