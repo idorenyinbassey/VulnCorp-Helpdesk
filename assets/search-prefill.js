@@ -25,7 +25,16 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!match) {
         return;
     }
-    var term = decodeURIComponent(match[1].replace(/\+/g, ' '));
+    // decodeURIComponent throws on a malformed percent-sequence (e.g. a
+    // bare "%" in the fragment) - that's a plain robustness bug, not part
+    // of this module's intended vulnerability, so it's guarded here same
+    // as any other untrusted-input parsing would be.
+    var term;
+    try {
+        term = decodeURIComponent(match[1].replace(/\+/g, ' '));
+    } catch (e) {
+        return;
+    }
     if (term === '') {
         return;
     }

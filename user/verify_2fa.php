@@ -6,11 +6,12 @@
 // includes/header.php's own comment and the Clickjacking module in
 // README for why that specific omission is this app's hard-tier
 // clickjacking bug: X-Frame-Options is only ever set inside header.php,
-// so a page that skips it never gets the protection either, no matter
-// the difficulty tier. This page still enforces its own login check
-// below; it just never got the shared header wired in when it was
-// built - exactly the kind of gap a real code review has to catch page
-// by page, not assume from one shared include.
+// so a page that skips it never gets the protection either. This page
+// still enforces its own login check below; it just never got the
+// shared header wired in when it was built - exactly the kind of gap a
+// real code review has to catch page by page, not assume from one
+// shared include. Expert tier closes the gap below with its own direct
+// header() call rather than pulling in header.php's full nav chrome.
 require_once dirname(__FILE__) . '/../includes/db.php';
 require_once dirname(__FILE__) . '/../includes/totp.php';
 if (session_id() === '') { session_start(); }
@@ -21,6 +22,13 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $difficulty = get_difficulty($conn);
+// Expert tier only: this page is brought into the clickjacking fix here
+// specifically (rather than by including header.php, which would also
+// pull in the normal nav chrome this lightweight page doesn't use) -
+// hard tier leaves it deliberately missing, see the comment up top.
+if ($difficulty === 'expert') {
+    header('X-Frame-Options: SAMEORIGIN');
+}
 $uid = (int)$_SESSION['user_id'];
 $error = '';
 

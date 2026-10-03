@@ -76,6 +76,18 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_token']) && $diffic
         // who fixated a session before the victim's "remember me" cookie
         // was even set still wins on the victim's next visit, since this
         // branch is reachable with zero fresh user interaction at all.
+        //
+        // 2FA Bypass module: this auto-login still has to respect
+        // totp_enabled the same way the password-login path below does -
+        // without this check, a "remember me" cookie would skip 2FA
+        // entirely at the hard tier (the only tier this branch runs at),
+        // which isn't any of this module's four intended tiered bugs, just
+        // an unrelated feature interaction.
+        if (!empty($u['totp_enabled'])) {
+            $_SESSION['totp_verified'] = false;
+            header('Location: ' . app_base() . '/user/verify_2fa.php');
+            exit;
+        }
         header('Location: ' . app_base() . '/dashboard.php');
         exit;
     }

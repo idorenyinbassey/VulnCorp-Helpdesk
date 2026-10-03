@@ -28,11 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket_id'], $_POST['
     }
 
     if ($allowed) {
+        // Only a genuinely pending request can be approved/denied - without
+        // this, hitting this endpoint with any ticket_id re-applies the
+        // action regardless of the ticket's actual escalation state
+        // (re-approving an already-approved ticket, or "approving" one
+        // that was never requested at all). That's a plain correctness
+        // bug, not one of this module's intended tiered findings - the
+        // intended bug here is which *callers* are allowed through, not
+        // which *tickets* are valid targets.
         if ($action === 'approve') {
-            mysqli_query($conn, "UPDATE tickets SET priority = 'urgent', escalation_status = 'approved' WHERE id = " . $ticket_id);
+            mysqli_query($conn, "UPDATE tickets SET priority = 'urgent', escalation_status = 'approved' WHERE id = " . $ticket_id . " AND escalation_status = 'pending'");
             log_activity($conn, $_SESSION['username'], "approved escalation for ticket #$ticket_id");
         } elseif ($action === 'deny') {
-            mysqli_query($conn, "UPDATE tickets SET escalation_status = 'denied' WHERE id = " . $ticket_id);
+            mysqli_query($conn, "UPDATE tickets SET escalation_status = 'denied' WHERE id = " . $ticket_id . " AND escalation_status = 'pending'");
             log_activity($conn, $_SESSION['username'], "denied escalation for ticket #$ticket_id");
         }
     }
