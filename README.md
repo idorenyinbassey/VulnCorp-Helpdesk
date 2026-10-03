@@ -621,18 +621,18 @@ document like this one doesn't need spreadsheet formats it has no use
 for — see `toolkit/index.php` if you add another document-shaped
 template later.
 
-> **Known drift, flagged rather than hidden:** the Labs 21–22 addition
-> to `20-lab-practices.md` was regenerated into `.docx` with `pandoc`,
-> but `assets/toolkit/doc/20-lab-practices.doc` and
-> `assets/toolkit/pdf/20-lab-practices.pdf` are currently **stale**
-> (pre-Lab-21/22 content) — `pandoc` doesn't emit legacy `.doc` at all,
-> and the LibreOffice (`soffice --headless --convert-to`) fallback used
-> to produce `.doc`/`.pdf` from the `.docx` consistently failed to load
-> *any* source file in the sandbox this was built in (reproduced even
-> against an untouched, pre-existing template), so regenerating those
-> two formats needs a working LibreOffice/pandoc-PDF-engine environment
-> this one didn't have. `.md` and `.docx` are both current; re-run the
-> `.doc`/`.pdf` conversion from `.docx` once you have that tooling.
+> **Known drift, flagged rather than hidden:** the Labs 23–30 addition
+> to `20-lab-practices.md` was regenerated into `.docx` (via `pandoc`)
+> and `.pdf` (via `pandoc` → HTML → `weasyprint`), but
+> `assets/toolkit/doc/20-lab-practices.doc` is currently **stale**
+> (pre-Lab-21 content) — `pandoc` doesn't emit legacy `.doc` at all, and
+> the LibreOffice (`soffice --headless --convert-to doc`) fallback used
+> to produce it from the `.docx` consistently fails with "source file
+> could not be loaded" in this sandbox, reproduced even against an
+> untouched, pre-existing template, so regenerating just this one format
+> needs a working LibreOffice environment this one doesn't have. `.md`,
+> `.docx`, and `.pdf` are all current through Lab 30; re-run the `.doc`
+> conversion from `.docx` once you have a working LibreOffice install.
 
 ## 10. Beginner-feedback tools
 
