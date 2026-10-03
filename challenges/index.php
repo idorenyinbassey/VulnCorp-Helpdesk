@@ -289,6 +289,134 @@ $challenges = array(
             'answer' => 'This is the same class of finding as the "No More SQLi — Break In Anyway" login-brute-force challenge, applied to an API credential instead of a password — write it up as "Missing Rate Limiting on API Token Exchange."',
         ),
     ),
+    array(
+        'title' => 'Ride In On a Known Session', 'module' => 'Session Management', 'target' => '/index.php',
+        'objective' => 'Prove that logging in never issues a fresh session ID — the same cookie value that existed before authentication is still valid afterward.',
+        'difficulty' => 'Standard',
+        'concept' => 'A session ID is supposed to mean something different the moment you authenticate — it stops being "an anonymous visitor\'s cookie" and starts being "a credential that proves who you are." If the app keeps using the exact same ID across that boundary, anyone who already knew that ID beforehand (set it themselves, read it over an unencrypted connection, found it in a shared/kiosk browser) becomes just as authenticated as you the instant you log in, without ever touching your password. This vulnerability class applies at both simple and intermediate tiers identically — the code never rotates the session ID at either one.',
+        'tools' => array('Browser DevTools or Burp Suite', 'curl (to inspect Set-Cookie headers directly)'),
+        'steps' => array(
+            'Visit <code>/index.php</code> anonymously and note your <code>PHPSESSID</code> cookie value.',
+            'Log in normally with any seeded account.',
+            'Compare the <code>PHPSESSID</code> value after login to the one from before — did the server ever send a new <code>Set-Cookie</code> at all?',
+        ),
+        'hints' => array(
+            'nudge' => 'Most of this app\'s bugs are about what a payload can do — this one is about what the server *doesn\'t* do at a specific moment. What would you expect to change about your session the instant you prove who you are?',
+            'answer' => 'Capture the <code>Set-Cookie: PHPSESSID=...</code> value (or lack of one) in Burp across the login POST — at simple/intermediate tier, no new session ID is ever issued, confirmed by the identical cookie value before and after.',
+        ),
+    ),
+    array(
+        'title' => 'Frame the 2FA Toggle', 'module' => 'Clickjacking', 'target' => '/user/enable_2fa.php',
+        'objective' => 'Build a page that overlays an invisible iframe of the 2FA settings page, tricking a logged-in victim into disabling their own 2FA with a single disguised click.',
+        'difficulty' => 'Standard',
+        'concept' => 'A browser has no way to know that the button a user just clicked on your page is actually an invisible, perfectly-positioned iframe showing someone else\'s site underneath their cursor — "UI redress," commonly called clickjacking. The only real defense is the SERVER telling the browser "never let anyone frame this page at all" via the <code>X-Frame-Options</code> header (or a CSP <code>frame-ancestors</code> directive) — without it, every single page in this app can be framed by any attacker-controlled site, at this tier.',
+        'tools' => array('Browser', 'a scratch HTML file'),
+        'steps' => array(
+            'Log in as <code>carol</code> (the only seeded account with 2FA enabled) and confirm <code>/user/enable_2fa.php</code> loads normally with a "Disable 2FA" button.',
+            'Build a minimal HTML page with a transparent <code>&lt;iframe&gt;</code> pointed at that exact URL, positioned so its Disable button sits under an innocent-looking "Click here" button on your page.',
+            'While logged in as carol in the same browser, open your crafted page and click the decoy button — confirm 2FA got disabled without ever seeing the real page.',
+        ),
+        'hints' => array(
+            'nudge' => 'This isn\'t a payload in a form field — it\'s about getting a real click on a real button on the REAL site, just hidden underneath something else. What HTTP response header exists specifically to stop a page from being iframed at all?',
+            'answer' => '<code>&lt;iframe src="http://TARGET/vulnapp/user/enable_2fa.php" style="opacity:0.001;position:absolute;top:0;left:0;width:300px;height:100px;"&gt;&lt;/iframe&gt;</code> layered under a decoy button at the same coordinates — confirm by checking the response headers for this page and noting <code>X-Frame-Options</code> is simply absent at this tier.',
+        ),
+    ),
+    array(
+        'title' => 'Read a Local File Through a Link Preview', 'module' => 'SSRF — Link Preview', 'target' => '/user/link_preview.php',
+        'objective' => 'Get the server itself to read and return the contents of a local file via the ticket composer\'s "paste a link to preview" feature.',
+        'difficulty' => 'Standard',
+        'concept' => 'A link-preview feature has to fetch the URL you give it — that fetch happens on the SERVER, using the server\'s own network access and file permissions, not your browser\'s. If nothing restricts which protocols or hosts that fetch can target, you\'re not just previewing links anymore: you\'re asking the server to make a request on your behalf to anywhere it can reach, including its own local filesystem via a <code>file://</code> URL. This is Server-Side Request Forgery (SSRF) — the server is forging a request it never meant to make, driven entirely by attacker input.',
+        'tools' => array('Browser DevTools or Burp Suite'),
+        'steps' => array(
+            'Log in as any user and open the ticket composer on <code>/user/tickets.php</code>.',
+            'In the "Paste a link to preview" field, enter <code>file:///etc/hostname</code> (or any world-readable file path on the box) instead of a normal <code>http://</code> URL.',
+            'Click Preview and confirm the file\'s contents come back in the response, not a normal web-page preview.',
+        ),
+        'hints' => array(
+            'nudge' => 'This feature fetches whatever URL you give it — does it check that the URL is actually a web page at all, or just hand it straight to the HTTP client library?',
+            'answer' => 'POST <code>url=file:///etc/hostname</code> directly to <code>/user/link_preview.php</code> — at this tier, no protocol restriction exists at all, so curl happily reads local files exactly as it would fetch a web page.',
+        ),
+    ),
+    array(
+        'title' => 'Leak a File via XML Import', 'module' => 'XXE — Bulk Ticket Import', 'target' => '/admin/import_tickets.php',
+        'objective' => 'Get the server to read an arbitrary local file and reflect its contents back into an imported ticket, using nothing but a crafted XML document (admin access required).',
+        'difficulty' => 'Stretch',
+        'concept' => 'XML lets you define your own custom shorthand codes — "entities" — right at the top of a document, including ones that mean "go read this external resource and paste it in right here." A parser that resolves those definitions without restriction will fetch whatever a <code>SYSTEM</code> entity points at — a local file, an internal URL, anything the server process can reach — and substitute its contents directly into the parsed document, which this app then saves straight into the new ticket. This is XML External Entity (XXE) injection, and on PHP versions before 8.0 (what this app targets — see README), it\'s the parser\'s own default behavior, not something a developer has to opt into.',
+        'tools' => array('Browser', 'a text editor for crafting the XML payload'),
+        'steps' => array(
+            'Log in as <code>admin</code> and open <code>/admin/import_tickets.php</code>.',
+            'Build an XML document whose <code>&lt;!DOCTYPE&gt;</code> defines an external general entity pointing at a local file (e.g. <code>/etc/hostname</code>), and reference that entity inside a <code>&lt;message&gt;</code> element.',
+            'Submit the import and check the "Imported" table — the ticket\'s message should contain the target file\'s actual contents instead of your literal entity reference.',
+        ),
+        'hints' => array(
+            'nudge' => 'XML lets a document define its own custom placeholders near the top, before the real content starts — what happens if one of those placeholders is defined as "go read this local file" instead of a plain string?',
+            'answer' => '<code>&lt;?xml version="1.0"?&gt;&lt;!DOCTYPE tickets [&lt;!ENTITY xxe SYSTEM "file:///etc/hostname"&gt;]&gt;&lt;tickets&gt;&lt;ticket&gt;&lt;subject&gt;leak&lt;/subject&gt;&lt;message&gt;&amp;xxe;&lt;/message&gt;&lt;/ticket&gt;&lt;/tickets&gt;</code> — the imported ticket\'s message becomes the file\'s contents.',
+        ),
+    ),
+    array(
+        'title' => 'Fire Script From a URL Fragment', 'module' => 'DOM XSS — Search Prefill', 'target' => '/user/tickets.php#q=',
+        'objective' => 'Get JavaScript to execute purely in the browser via a "deep link to a search" feature — without the payload ever reaching the server at all.',
+        'difficulty' => 'Entry',
+        'concept' => 'Everything after a <code>#</code> in a URL is a "fragment" — browsers deliberately never send it to the server in the actual HTTP request, which is exactly what makes it fast to use for client-side deep-linking. But that also means none of this app\'s server-side defenses (not even at hard/expert tier) ever get a chance to see or sanitize it — whatever JavaScript on the page reads <code>location.hash</code> and writes it into the DOM is the *entire* defense, for better or worse. At this tier, it writes it in completely raw.',
+        'tools' => array('Browser address bar — no proxy tooling needed'),
+        'steps' => array(
+            'Visit <code>/user/tickets.php</code> normally and confirm the page loads.',
+            'Append <code>#q=&lt;script&gt;alert(1)&lt;/script&gt;</code> to the URL and reload.',
+            'Confirm the script executes — then check the Network tab and note the fragment never appeared in any request the browser actually sent.',
+        ),
+        'hints' => array(
+            'nudge' => 'Try the exact same payload that worked for the server-side stored XSS challenge, but put it after a <code>#</code> in the URL instead of in a ticket field — does it still fire, and did the server ever see it this time?',
+            'answer' => '<code>/user/tickets.php#q=&lt;script&gt;alert(1)&lt;/script&gt;</code> — the "Showing results for" banner writes this straight into <code>innerHTML</code> with zero filtering at this tier.',
+        ),
+    ),
+    array(
+        'title' => 'The Code Prompt That Isn\'t Checked', 'module' => '2FA Bypass', 'target' => '/user/verify_2fa.php',
+        'objective' => 'Log in as the one seeded 2FA-enabled account and reach the dashboard without ever entering a valid code.',
+        'difficulty' => 'Entry',
+        'concept' => 'Adding a second login step to the UI doesn\'t automatically mean the SERVER actually requires it — those are two different things. If the "fully logged in" flag gets set the moment your password checks out, and the redirect to the code-entry page is just where the flow happens to send you next, then the 2FA prompt is purely cosmetic: everywhere else in the app only cares about that one flag, which was already true before you ever saw a code field.',
+        'tools' => array('Browser'),
+        'steps' => array(
+            'Log in as <code>carol</code> / <code>carol123</code> — the only seeded account with 2FA enabled.',
+            'Confirm you land on a "Enter your 2FA code" page instead of the dashboard.',
+            'Without entering anything, navigate directly to <code>/dashboard.php</code> in the address bar.',
+        ),
+        'hints' => array(
+            'nudge' => 'The redirect to the code page happens right after your password is accepted — ask yourself what, specifically, changed in your session at that exact moment, and whether the code you haven\'t typed yet had anything to do with it.',
+            'answer' => 'Browse straight to <code>/dashboard.php</code> after the password step — you\'re already in. At this tier, the "verified" flag is set to true before the code is ever checked, purely so the UI flow looks consistent with the other tiers.',
+        ),
+    ),
+    array(
+        'title' => 'Poison the Login Page for Everyone', 'module' => 'Cache Poisoning', 'target' => '/index.php',
+        'objective' => 'Confirm that a header you control gets baked unescaped into the login page\'s HTML.',
+        'difficulty' => 'Standard',
+        'concept' => 'This app caches the rendered login page to disk for a short time, keyed only by the URL — exactly like a real CDN or reverse-proxy cache, which by default does NOT vary its cache by request headers unless specifically configured to. If the page reflects a header value into its HTML, and that header never affects the cache key, then whatever you send in that header gets baked into a response that gets served to the NEXT visitor who requests the same URL — not just you.',
+        'tools' => array('Burp Suite or curl (to set a custom request header)'),
+        'steps' => array(
+            'Request <code>/index.php</code> normally with curl and view the page source — note the <code>&lt;link rel="canonical"&gt;</code> tag in the <code>&lt;head&gt;</code>.',
+            'Resend the exact same request, this time adding a header: <code>X-Forwarded-Host: evil.example</code>.',
+            'View the response and confirm the canonical link now contains <code>evil.example</code>, unescaped, directly in the HTML.',
+        ),
+        'hints' => array(
+            'nudge' => 'Look at where the canonical link\'s URL comes from — is it built from something fixed about this server, or from something in the request itself?',
+            'answer' => '<code>curl -H "X-Forwarded-Host: evil.example" http://TARGET/vulnapp/</code> — the canonical href becomes <code>http://evil.example/</code>, completely unescaped. (The next challenge tier asks you to prove this actually gets cached and served to someone else.)',
+        ),
+    ),
+    array(
+        'title' => 'Escalate Your Own Ticket', 'module' => 'Business Logic — Escalation Workflow', 'target' => '/user/tickets.php',
+        'objective' => 'Bump your own ticket straight to Urgent priority using the "Request Escalation" feature meant to require staff approval.',
+        'difficulty' => 'Entry',
+        'concept' => 'A button labeled "Request" implies there\'s a separate step where someone else decides whether to grant it — that\'s the whole point of an approval workflow. If the handler behind that button just performs the privileged action directly, with no actual approval gate anywhere in the server-side code, then the feature\'s name is describing a workflow that doesn\'t exist yet, not one that\'s actually been built.',
+        'tools' => array('Browser'),
+        'steps' => array(
+            'Log in as any regular user and submit a ticket (or use an existing one).',
+            'Click "Request Urgent" next to the ticket.',
+            'Reload and confirm the ticket\'s priority is now <code>urgent</code> — immediately, with no staff ever involved.',
+        ),
+        'hints' => array(
+            'nudge' => 'The button is labeled "Request" — does anything in this app actually represent a separate, staff-controlled approval step at this tier, or does clicking it just directly do the thing?',
+            'answer' => 'Click "Request Urgent" and check the ticket\'s priority column immediately afterward — it\'s already <code>urgent</code>, and <code>escalation_status</code> is already <code>approved</code>, with zero staff involvement.',
+        ),
+    ),
 ),
 
 'intermediate' => array(
@@ -466,6 +594,102 @@ $challenges = array(
         'hints' => array(
             'nudge' => 'The check confirms you own the ticket *before* the update runs — does it also confirm you still own it, specifically, after your own update changes who the owner is?',
             'answer' => 'As the owner, POST <code>ticket_id=1&amp;user_id=&lt;bob\'s id&gt;</code> — the ownership check you legitimately pass is for the ticket\'s state going in, not its state coming out.',
+        ),
+    ),
+    array(
+        'title' => 'Dress Up 127.0.0.1', 'module' => 'SSRF — Link Preview', 'target' => '/user/link_preview.php',
+        'objective' => 'The preview feature now blocks a <code>localhost</code>/<code>127.0.0.1</code> substring blacklist. Reach the same loopback address under a different spelling.',
+        'difficulty' => 'Standard',
+        'concept' => 'A blacklist built out of string comparisons only blocks the exact spellings someone thought to type in. IPv4 has several legal-but-unusual ways to write the same address — a short form that drops leading octets, or octal notation with a leading zero — that a browser and a C-based resolver (which is what curl ultimately uses) will both still happily resolve to <code>127.0.0.1</code>, even though the string never contains the substrings <code>"localhost"</code> or <code>"127.0.0.1"</code>.',
+        'tools' => array('Browser or curl'),
+        'steps' => array(
+            'Confirm <code>http://127.0.0.1/</code> and <code>http://localhost/</code> are now rejected by the preview feature.',
+            'Try an alternate representation of the same address instead — e.g. <code>http://127.1/</code> or <code>http://0177.0.0.1/</code>.',
+            'Confirm the preview still fetches the internal resource, proving the block is string-matching, not address-resolving.',
+        ),
+        'hints' => array(
+            'nudge' => 'The filter is looking for specific text in the URL. Is there more than one way to write "127.0.0.1" that a resolver still understands?',
+            'answer' => 'Submit <code>http://127.1/</code> (or octal <code>http://0177.0.0.1/</code>) as the link to preview — neither string contains the blocked substrings, but both resolve to loopback.',
+        ),
+    ),
+    array(
+        'title' => 'The Fix That Substitutes Instead of Blocking', 'module' => 'XXE — Bulk Import Tickets', 'target' => '/admin/import_tickets.php',
+        'objective' => 'The import feature now uses <code>DOMDocument</code> instead of <code>simplexml_load_string()</code> — confirm the external entity read still works exactly the same way.',
+        'difficulty' => 'Stretch',
+        'concept' => 'Switching parsers is often assumed to be a security fix on its own, but the actual behavior is controlled by the flags passed in, not the class name. <code>LIBXML_NOENT</code> sounds protective — it reads like "no entities" — but it actually means the opposite: substitute entity references with their defined value when building the tree. That is precisely the operation XXE depends on.',
+        'tools' => array('Burp Suite or curl'),
+        'steps' => array(
+            'Resend your Simple-tier XXE payload (a <code>&lt;!DOCTYPE&gt;</code> defining an external entity pointing at a local file) unchanged.',
+            'Confirm the import still succeeds and the file contents still come back in the created ticket.',
+            'Report that switching to <code>DOMDocument</code> did not close this — only removing <code>LIBXML_NOENT</code>, or disabling entity loading entirely, would.',
+        ),
+        'hints' => array(
+            'nudge' => 'Read what <code>LIBXML_NOENT</code> actually does, not what its name suggests it does.',
+            'answer' => 'Your original <code>&lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;</code> payload still works unchanged — <code>LIBXML_NOENT</code> substitutes entities, it does not block them.',
+        ),
+    ),
+    array(
+        'title' => 'The Filter That Checks for One Tag', 'module' => 'DOM XSS — Search Deep Link', 'target' => '/user/tickets.php#q=',
+        'objective' => 'The deep-link banner now strips the literal text <code>&lt;script</code> before writing it into the page. Get script execution anyway, entirely client-side.',
+        'difficulty' => 'Standard',
+        'concept' => 'The exact same lesson as the server-side ticket renderer\'s keyword filter, now sitting in JavaScript instead of PHP: stripping one tag name does nothing to the dozens of other HTML elements whose attributes can execute JavaScript on their own, with no <code>&lt;script&gt;</code> tag involved at all.',
+        'tools' => array('Browser address bar'),
+        'steps' => array(
+            'Confirm <code>#q=&lt;script&gt;alert(1)&lt;/script&gt;</code> is now neutralized (the literal text is stripped before being written to the page).',
+            'Try a payload that never uses the word "script" at all — an image tag with a broken source and an <code>onerror</code> handler.',
+            'Confirm the alert still fires, purely from the URL fragment, with no request ever reaching the server.',
+        ),
+        'hints' => array(
+            'nudge' => 'The filter is looking for one specific substring. Which other HTML elements can run JavaScript without ever containing that substring?',
+            'answer' => 'Visit <code>/user/tickets.php#q=&lt;img src=x onerror=alert(1)&gt;</code> — the banner still writes it via <code>innerHTML</code>, and the browser executes <code>onerror</code> on the broken image, no <code>&lt;script&gt;</code> text anywhere in the payload.',
+        ),
+    ),
+    array(
+        'title' => 'The Session Flag That Means Two Things', 'module' => '2FA Bypass', 'target' => '/api/tickets.php',
+        'objective' => 'The main login flow now correctly withholds full access until a TOTP code is verified. Find a different endpoint that was never told about the new partial-auth state.',
+        'difficulty' => 'Stretch',
+        'concept' => 'Adding a new check to the login flow protects every page that funnels through the same gate — but a second-factor fix only actually works if *every* authenticated endpoint checks the same thing the same way. An endpoint written earlier, checking only "is there a logged-in session," has no idea a newer, in-between "logged in but not yet verified" state now exists, because nobody went back and updated it.',
+        'tools' => array('Burp Suite or curl', 'carol\'s credentials (the account with 2FA enabled)'),
+        'steps' => array(
+            'Log in as carol with the correct password; confirm you land on the 2FA code-entry step, not the dashboard.',
+            'Without ever entering a TOTP code, request <code>/api/tickets.php</code> using the session cookie you already have.',
+            'Confirm it returns data instead of rejecting the still-partial session.',
+        ),
+        'hints' => array(
+            'nudge' => 'The dashboard correctly bounces you back to the 2FA step. Does every endpoint that checks "am I logged in" actually ask the same question the dashboard does?',
+            'answer' => 'After carol\'s password step (but before entering any code), hit <code>/api/tickets.php</code> directly — it only checks <code>isset($_SESSION[\'user_id\'])</code>, which is already set at this point, so it returns ticket data from a session that never completed 2FA.',
+        ),
+    ),
+    array(
+        'title' => 'Bust the Cache, Poison It For Real', 'module' => 'Cache Poisoning — Login Page', 'target' => '/index.php',
+        'objective' => 'A cache-buster is now needed to force a fresh cache entry — use that same technique to actually prove the poisoning, not just the reflection.',
+        'difficulty' => 'Standard',
+        'concept' => 'This is the real technique security researchers use to demonstrate cache poisoning safely during testing: appending a harmless, cache-key-varying query parameter lets you force the cache to populate a *fresh* entry on demand, so you can poison it and then immediately confirm a second, "clean" request to the exact same URL gets served your injected content back — proving impact instead of just reflection.',
+        'tools' => array('curl (two separate requests)'),
+        'steps' => array(
+            'Request <code>/index.php?cb=1</code> with a crafted <code>X-Forwarded-Host</code> header, to force a fresh cache entry for that exact URL.',
+            'Request the exact same URL, <code>/index.php?cb=1</code>, again — this time with no special header at all.',
+            'Confirm the second, "clean" request still shows your injected value in the canonical link — the cache served your poisoned entry to a request that never sent the header.',
+        ),
+        'hints' => array(
+            'nudge' => 'The cache is keyed by the full request URL, including query string. How could you force a brand-new cache entry on demand, poison it, then check it from a "clean" second request to that identical URL?',
+            'answer' => '<code>curl -H "X-Forwarded-Host: evil.example" "http://TARGET/vulnapp/index.php?cb=1"</code>, then <code>curl "http://TARGET/vulnapp/index.php?cb=1"</code> with no header at all — the second response still contains <code>evil.example</code>, served straight from the poisoned cache entry.',
+        ),
+    ),
+    array(
+        'title' => 'The Button That Lied About Being Disabled', 'module' => 'Business Logic — Escalation Workflow', 'target' => '/user/tickets.php',
+        'objective' => 'The "Request Escalation" button now greys itself out after one click. Confirm that\'s cosmetic, not an actual server-side gate.',
+        'difficulty' => 'Standard',
+        'concept' => 'A pending state now exists in the data model — but a pending state only protects anything if the server actually enforces it on every write. Disabling a button in JavaScript changes what the browser is willing to let you click; it does nothing at all to what the server behind that button is willing to accept, since the server has no idea the button exists.',
+        'tools' => array('Burp Suite or curl (to resend the POST directly, bypassing the disabled button)'),
+        'steps' => array(
+            'Click "Request Urgent" once in the browser and confirm the button now shows as disabled/pending.',
+            'Using Burp or curl, resend the exact same POST request directly to the server — not through the now-disabled button.',
+            'Confirm the ticket escalates immediately anyway, with no staff approval, despite the UI claiming a request is "pending."',
+        ),
+        'hints' => array(
+            'nudge' => 'The button being greyed out is something the browser decided to do. Does the server know, or care, what the button currently looks like?',
+            'answer' => 'Resend the identical <code>action=request_escalation</code> POST directly (skip the disabled button entirely) — the server applies the escalation immediately regardless of any client-side "pending" state.',
         ),
     ),
 ),
@@ -647,6 +871,118 @@ $challenges = array(
             'answer' => 'Varying the username\'s capitalization (<code>Alice</code> vs <code>alice</code>) lands on a fresh counter because the comparison is case-sensitive; separately, setting a different <code>X-Forwarded-For: 1.2.3.4</code> value on every request resets the IP half of the key, since the server trusts that header outright instead of using the real connecting IP.',
         ),
     ),
+    array(
+        'title' => 'Fixate It, Then Wait For Remember-Me', 'module' => 'Session Fixation', 'target' => '/index.php',
+        'objective' => 'The main password-login path now correctly regenerates the session ID. Find the *other* way a session gets established without that happening.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A single login flow often has more than one entry point that ends in the same authenticated state — a password check, and a "remember me" cookie that silently logs the same account back in later. Fixing session handling on the first path is easy to verify and easy to call done; it\'s also easy to forget that the second, less-visible path produces an identical session and needs the identical fix, independently.',
+        'tools' => array('Browser dev tools (to plant a known session ID cookie)', 'two browser profiles (attacker + victim)'),
+        'steps' => array(
+            'As the attacker, visit the login page and note your own pre-auth session ID (no login yet).',
+            'Get the victim to open a link carrying that same session ID (fixation), then have the victim log in once and log out, leaving their "remember me" cookie in place.',
+            'Wait for the remember-me cookie to silently re-authenticate the victim on a later visit, then check whether your originally-noted session ID is now the victim\'s logged-in session.',
+        ),
+        'hints' => array(
+            'nudge' => 'You confirmed the password-check path regenerates the ID correctly. Is the "remember me" auto-login branch literally the same code, or a separate branch that might have been missed?',
+            'answer' => 'The remember-me cookie branch in <code>index.php</code> logs the account back in without ever calling <code>session_regenerate_id()</code> — plant a session ID before the victim\'s remember-me auto-login fires, and that same ID becomes their authenticated session.',
+        ),
+    ),
+    array(
+        'title' => 'Frame the One Page That Forgot the Header', 'module' => 'Clickjacking', 'target' => '/user/verify_2fa.php',
+        'objective' => 'Every normal page now sends <code>X-Frame-Options</code>. Find the one page in the app that doesn\'t, and frame it.',
+        'difficulty' => 'Standard',
+        'concept' => 'A security header added to one shared template protects every page that actually goes through that template — but not a page that was built as a standalone, lightweight file and never wired up to include the same shared chrome. That\'s often true of single-purpose flow steps (like a second-factor prompt) that get written quickly, outside the normal page structure, specifically because they\'re "just one small form."',
+        'tools' => array('A simple local HTML file with an <code>&lt;iframe&gt;</code>'),
+        'steps' => array(
+            'Confirm a normal page like the dashboard now sends <code>X-Frame-Options</code> and refuses to render inside your test iframe.',
+            'Log in with carol\'s account (2FA-enabled) to reach <code>/user/verify_2fa.php</code>, then try framing that specific page instead.',
+            'Confirm it loads inside your iframe with no restriction, because this one page never goes through the header-sending shared template.',
+        ),
+        'hints' => array(
+            'nudge' => 'The header is added in one shared file every normal page includes. Does every page in this app actually include it?',
+            'answer' => '<code>/user/verify_2fa.php</code> is a standalone page that never includes <code>includes/header.php</code>, so it never gets <code>X-Frame-Options</code> — frame it directly and overlay a fake "Disable 2FA" button on top of its real one to clickjack the toggle.',
+        ),
+    ),
+    array(
+        'title' => 'Validate the URL, Then Follow It Somewhere Else', 'module' => 'SSRF — Link Preview', 'target' => '/user/link_preview.php',
+        'objective' => 'The preview feature now properly validates the initial host against private IP ranges. Get it to fetch an internal address anyway.',
+        'difficulty' => 'Stretch',
+        'concept' => 'Validating a URL once, before the request is sent, only closes the SSRF if nothing *after* that validation can change where the request actually ends up going. A fetch that automatically follows redirects introduces exactly that gap: the first hop you validated is completely legitimate, and the server\'s own HTTP client decides, entirely on its own, to then follow a 3xx response to wherever its <code>Location</code> header points — without re-running the same check.',
+        'tools' => array('A server you control (or a free redirect service) to host a redirect', 'curl or Burp'),
+        'steps' => array(
+            'Confirm a direct request to an internal address like <code>http://127.0.0.1/</code> is now correctly rejected before any fetch happens.',
+            'Submit a URL to a server you control that responds with a 3xx redirect pointing at an internal address instead.',
+            'Confirm the preview follows the redirect and fetches the internal resource, since only the original (externally-hosted, legitimate-looking) URL was ever validated.',
+        ),
+        'hints' => array(
+            'nudge' => 'The validation runs once, before the fetch. What happens if the URL you submit is valid and external, but responds with a redirect?',
+            'answer' => 'Host a redirect (HTTP 302 to <code>http://127.0.0.1/some-internal-path</code>) at a URL that passes the initial validation, and submit that URL — the preview\'s HTTP client follows the redirect without re-validating the new destination.',
+        ),
+    ),
+    array(
+        'title' => 'Exfiltrate Blind, One DNS Lookup at a Time', 'module' => 'XXE — Bulk Import Tickets', 'target' => '/admin/import_tickets.php',
+        'objective' => 'Direct file disclosure is now closed. Describe how data could still be exfiltrated out-of-band, using a parameter entity instead of a general one.',
+        'difficulty' => 'Stretch',
+        'concept' => 'Disabling the straightforward "read a file and get it echoed straight back" path is the fix most people reach for first — but it only closes the path where the *response itself* carries the stolen data. A parameter entity (declared with <code>%name;</code> rather than <code>&amp;name;</code>) can reference an *external* DTD hosted on an attacker-controlled server, and that external DTD can itself build a request — e.g. to a URL containing the contents of a local file as part of the hostname — that the vulnerable server makes outbound, independent of whatever gets returned to the original caller. The attacker\'s own server, watching its access logs or DNS queries, receives the data; the HTTP response to the import request never needs to contain it at all.',
+        'tools' => array('A server you control that can log inbound requests/DNS queries (conceptual exercise — not run live in this lab)'),
+        'steps' => array(
+            'Confirm direct external-entity file disclosure (your Simple/Intermediate payloads) no longer works at this tier.',
+            'Research how a parameter entity referencing an attacker-hosted external DTD can still trigger an outbound request carrying stolen file contents, even when the *main* document\'s external entities are disabled.',
+            'Write up the attack chain (XML payload → external DTD fetch → DTD-defined parameter entity reading a local file → that value used to build a URL requested by the target → data arrives in the attacker\'s own access log) as your submission — this one is intentionally not wired up as a live exploit in the lab, matching this app\'s existing restraint around payloads too risky to run destructively in a shared classroom environment.',
+        ),
+        'hints' => array(
+            'nudge' => 'The fix closes entities that get *substituted back into the response*. Is there a different kind of entity, declared differently, that could carry data out through a completely different channel?',
+            'answer' => 'A parameter entity (<code>%xxe;</code>) defined inside an attacker-hosted external DTD can reference a local file and splice its contents into a URL that the target server then requests on its own — the attacker never needs the import\'s own HTTP response to contain anything; the data shows up in their web server\'s access log instead. This is "blind" or out-of-band XXE.',
+        ),
+    ),
+    array(
+        'title' => 'The Allowlist That Checks for href, Not Just href', 'module' => 'DOM XSS — Search Deep Link', 'target' => '/user/tickets.php#q=',
+        'objective' => 'The banner now uses an allowlist that keeps <code>&lt;a href&gt;</code> links but strips every other tag. Smuggle script execution through an allowed tag anyway.',
+        'difficulty' => 'Stretch',
+        'concept' => 'The same gap as this app\'s server-side "naive allowlist" ticket renderer, now in client-side JavaScript: a sanitizer that checks "is this an <code>&lt;a&gt;</code> tag with an <code>href</code> attribute present" and, satisfied, leaves the whole tag alone, has only verified that ONE attribute exists — it never looked at what OTHER attributes might also be sitting on that same tag.',
+        'tools' => array('Browser address bar'),
+        'steps' => array(
+            'Confirm a bare <code>&lt;img onerror=...&gt;</code> payload is now stripped (not an <code>&lt;a&gt;</code> tag, so it doesn\'t pass the allowlist at all).',
+            'Try an <code>&lt;a&gt;</code> tag that legitimately has an <code>href</code> attribute, but also carries an event-handler attribute alongside it.',
+            'Confirm the whole tag survives the filter, and the event handler still fires.',
+        ),
+        'hints' => array(
+            'nudge' => 'The filter\'s rule is "keep it if it\'s an &lt;a&gt; tag and has an href." Does satisfying that rule say anything about what ELSE is allowed to be on the tag?',
+            'answer' => 'Visit <code>/user/tickets.php#q=&lt;a href=# onmouseover=alert(1)&gt;hover me&lt;/a&gt;</code> — it has a valid <code>href</code>, so the allowlist keeps the entire tag including <code>onmouseover</code>, which fires on interaction.',
+        ),
+    ),
+    array(
+        'title' => 'Six Digits, No Lockout', 'module' => '2FA Bypass', 'target' => '/user/verify_2fa.php',
+        'objective' => 'The forgotten-endpoint gap is closed — every page now correctly requires a verified second factor. Show that the code-entry step itself has no limit on guesses.',
+        'difficulty' => 'Standard',
+        'concept' => 'Closing every bypass around a control doesn\'t help if the control itself can simply be brute-forced. A 6-digit TOTP code is one of one million possibilities at any given moment — a small enough space that, with no rate limiting or lockout on the verification endpoint, an attacker who already has a valid username/password (phished, leaked, reused) can simply guess codes until the current 30-second window\'s correct one lands, same as the existing login brute-force and API rate-limiting lessons elsewhere in this app.',
+        'tools' => array('Burp Suite Intruder (or a scripted loop)', 'a valid username/password with 2FA enabled'),
+        'steps' => array(
+            'Log in with carol\'s correct password to reach the code-entry step.',
+            'Send a long sequence of incorrect 6-digit codes in a tight loop.',
+            'Confirm none of them trigger a lockout, delay, or any limiting response at all — the endpoint accepts guesses indefinitely.',
+        ),
+        'hints' => array(
+            'nudge' => 'This app already has a login brute-force lesson and an API rate-limiting lesson elsewhere. Does the SAME kind of protection exist on the brand-new code-entry endpoint?',
+            'answer' => 'Hammer <code>/user/verify_2fa.php</code> with sequential or random 6-digit codes after a valid password step — there\'s no attempt counter, delay, or lockout anywhere on this endpoint, so a 1-in-1,000,000 guess per 30-second window is the only thing standing between an attacker and a full bypass.',
+        ),
+    ),
+    array(
+        'title' => 'Escalate Someone Else\'s Ticket Yourself', 'module' => 'Business Logic — Escalation Workflow', 'target' => '/support/escalation_approve.php',
+        'objective' => 'Escalation requests now correctly sit in a pending state. Approve your OWN pending request directly, without being staff at all.',
+        'difficulty' => 'Stretch',
+        'concept' => 'Introducing a pending state and an approval endpoint only creates a real approval gate if the approval endpoint itself checks who\'s allowed to approve. An endpoint that correctly requires *some* logged-in session, but never checks *which role* that session belongs to, has built the workflow\'s shape without building its actual security property — anyone, not just support/admin staff, can walk up and approve their own request.',
+        'tools' => array('Burp Suite or curl', 'a plain non-staff account'),
+        'steps' => array(
+            'As a regular user, submit a "Request Urgent" on your own ticket and confirm it now sits in a <code>pending</code> state rather than applying immediately.',
+            'Find the approval endpoint the staff UI posts to, and send that exact same request yourself, still logged in as the plain user.',
+            'Confirm your own ticket gets approved to <code>urgent</code>, despite you never having support or admin privileges.',
+        ),
+        'hints' => array(
+            'nudge' => 'The approval endpoint definitely requires you to be logged in. Does it separately require you to be logged in AS STAFF?',
+            'answer' => 'POST <code>action=approve&amp;ticket_id=&lt;your own ticket&gt;</code> to <code>/support/escalation_approve.php</code> while logged in as a plain user — it only calls <code>require_login()</code>, never checking <code>$_SESSION[\'role\']</code>, so any authenticated account can approve any pending request, including their own.',
+        ),
+    ),
 ),
 
 'expert' => array(
@@ -760,6 +1096,86 @@ $challenges = array(
         'hints' => array(
             'nudge' => 'The rejection you just triggered checked one specific PHP superglobal for the restricted field — does the code that actually performs the write look in exactly that same place, or somewhere broader?',
             'answer' => 'POST to <code>/api/ticket_update.php?priority=urgent</code> (field in the query string, not the POST body) with <code>ticket_id</code> still in the body — the privilege check only inspects <code>$_POST</code> and never sees it, but the write loop reads <code>$_REQUEST</code>, which includes the query string.',
+        ),
+    ),
+    array(
+        'title' => 'The One Address Every Blocklist Forgets', 'module' => 'SSRF — Link Preview', 'target' => '/user/link_preview.php',
+        'objective' => 'Redirects are now re-validated at every hop and basic private ranges are blocked. Find the one reachable address that was never on the list.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A hand-rolled "block private IP ranges" check is really a checklist of everything the author remembered to type in — RFC1918 ranges, loopback, maybe link-local in the abstract — and checklists are exactly as complete as the person writing them. The cloud-metadata address is link-local (<code>169.254.0.0/16</code>) but almost never shows up in anyone\'s mental model of "private ranges" unless they\'ve specifically been burned by it before, which makes it the single most common real-world gap in exactly this kind of filter — common enough that it\'s the example this app\'s own vulnerability reference names for SSRF.',
+        'tools' => array('curl or Burp'),
+        'steps' => array(
+            'Confirm both a direct loopback request and a redirect to loopback are now correctly blocked at every hop.',
+            'Submit <code>http://169.254.169.254/</code> directly as the URL to preview.',
+            'Confirm it\'s fetched successfully — this address was never included in the private-range blocklist.',
+        ),
+        'hints' => array(
+            'nudge' => 'The blocklist covers the ranges most people think of as "private." Is there a well-known internal-only address that technically belongs to a DIFFERENT, easy-to-forget range?',
+            'answer' => '<code>169.254.169.254</code> — the cloud instance-metadata address — is link-local (<code>169.254.0.0/16</code>), a range the hand-rolled check never accounts for. On a real cloud deployment this is how SSRF leads to full credential theft; here, confirming the fetch succeeds at all is the proof.',
+        ),
+    ),
+    array(
+        'title' => 'Confirm the Deep Link Is Finally Safe', 'module' => 'DOM XSS — Search Deep Link', 'target' => '/user/tickets.php#q=',
+        'objective' => 'The banner now writes the fragment value using <code>textContent</code> instead of <code>innerHTML</code>. Confirm every prior payload fails, and explain the one-line fix in your own words.',
+        'difficulty' => 'Standard',
+        'concept' => 'This closes the loop the same way the CSRF module\'s expert tier does: <code>textContent</code> assigns a string as literal text, full stop — the browser never parses it as markup, so there is no tag, attribute, or event handler for any payload to hide inside, regardless of how the filtering logic upstream of it is written. The fix isn\'t a better filter; it\'s using an API that was never capable of interpreting its input as HTML in the first place.',
+        'tools' => array('Browser address bar'),
+        'steps' => array(
+            'Re-run your Hard-tier <code>&lt;a href=# onmouseover=...&gt;</code> payload (and the earlier simple/intermediate ones) unchanged against this tier.',
+            'Confirm the banner now displays the literal, inert text of your payload instead of executing anything.',
+            'View the page source or dev tools to see that the value was assigned via <code>textContent</code>, and write one sentence on why that makes the specific filtering bypasses you used earlier irrelevant.',
+        ),
+        'hints' => array(
+            'nudge' => 'Every previous bypass depended on the browser parsing your fragment value AS markup. What changes if the assignment never triggers HTML parsing at all?',
+            'answer' => 'All prior payloads now render as plain, visible text — <code>element.textContent = value</code> never interprets its argument as HTML, so there is no allowlist or blacklist left to bypass; the sink itself stopped being exploitable.',
+        ),
+    ),
+    array(
+        'title' => 'The Cookie That Never Needed the Code', 'module' => '2FA Bypass', 'target' => '/user/verify_2fa.php',
+        'objective' => 'Code-guessing is now rate-limited. Skip entering a code at all, using the "remember this device" feature.',
+        'difficulty' => 'Stretch',
+        'concept' => 'A "remember this device" convenience feature has to generate a token that\'s actually unpredictable, because once set, that cookie is functionally equivalent to a completed second factor — anyone who can produce a valid one skips 2FA entirely, forever (or until it expires), with no code-guessing involved at all. Deriving it from a value that\'s not even secret, like the username, makes it trivial to forge for any account, the same weak-token pattern this app\'s own password-reset module already uses at its simple tier.',
+        'tools' => array('Browser dev tools (to set a cookie manually)', 'a target username'),
+        'steps' => array(
+            'Log in once with carol\'s correct password and complete 2FA normally, checking "remember this device" — note the resulting cookie\'s name and value.',
+            'Figure out how that value relates to the username, without ever looking at server source.',
+            'Clear your session, then manually set a forged cookie built the same way for carol\'s account and visit the login page — confirm you land on the dashboard with no code ever requested.',
+        ),
+        'hints' => array(
+            'nudge' => 'Compare the remember-device cookie\'s value against the account\'s username using a few common hash functions. Does it match any of them directly?',
+            'answer' => 'The cookie is <code>trusted_device_&lt;user_id&gt; = md5(username)</code> — compute <code>md5("carol")</code> yourself, set that as the cookie value, and the login flow skips straight past the code-entry step entirely, independent of any rate limiting on the code itself.',
+        ),
+    ),
+    array(
+        'title' => 'The Other Header Nobody Keyed the Cache On', 'module' => 'Cache Poisoning — Login Page', 'target' => '/index.php',
+        'objective' => 'The canonical-link header is now excluded from the cached response entirely. Find the other, unrelated header still being reflected into the same cached page.',
+        'difficulty' => 'Standard',
+        'concept' => 'Fixing the specific header a reviewer was shown (or found first) doesn\'t mean every other unkeyed, reflected header on the same page got the same review — a "preferred language" banner is a completely different feature, built separately, and easy to overlook once attention has already moved on to the header everyone was focused on. The underlying lesson repeats: the cache still doesn\'t vary by this header either, so the same poisoning mechanics apply, just through a different, lower-profile value.',
+        'tools' => array('curl (two separate requests, as in the earlier cache-poisoning challenge)'),
+        'steps' => array(
+            'Confirm <code>X-Forwarded-Host</code> no longer gets reflected into the cached canonical link at all.',
+            'Request <code>/index.php?cb=2</code> with a crafted <code>Accept-Language</code> header value instead, then request the same URL again with no special header.',
+            'Confirm the "preferred language" banner on the clean second request still shows your crafted value, proving this second header is still being cached unkeyed.',
+        ),
+        'hints' => array(
+            'nudge' => 'One reflected header just got fixed. Is it the only piece of request data this page reflects into HTML that then gets cached?',
+            'answer' => '<code>curl -H "Accept-Language: &lt;script&gt;evil&lt;/script&gt;" "http://TARGET/vulnapp/index.php?cb=2"</code>, then a clean request to the same URL — the "preferred language" banner still carries your value from the earlier poisoned entry, since <code>Accept-Language</code> was never added to the cache key either.',
+        ),
+    ),
+    array(
+        'title' => 'Deny It, Then Just Ask Again', 'module' => 'Business Logic — Escalation Workflow', 'target' => '/user/tickets.php',
+        'objective' => 'Approval is now correctly staff-only. Show that nothing stops a denied request from simply being resubmitted, over and over, with no limit.',
+        'difficulty' => 'Standard',
+        'concept' => 'A workflow can have every individual step correctly gated — a real pending state, a real staff-only approval check — and still have no answer to "what stops someone from just doing the request step again immediately." That\'s not a flaw in any single check; it\'s the absence of a control that spans the whole workflow (a cooldown, a per-user cap on open requests), the same "missing control, not a broken one" flavor as this app\'s other expert-tier absence-of-rate-limiting findings.',
+        'tools' => array('Browser or a scripted loop', 'a staff account to issue denials'),
+        'steps' => array(
+            'As a regular user, request escalation on a ticket, then have a staff account deny it.',
+            'Immediately request escalation again on the same ticket.',
+            'Repeat several times in quick succession and confirm there\'s no cooldown, cap, or any limit on how many times the request step can be resubmitted after a denial.',
+        ),
+        'hints' => array(
+            'nudge' => 'Every individual step in this workflow is now correctly checked. Is there anything at all limiting how many TIMES you\'re allowed to go through the whole workflow?',
+            'answer' => 'Resubmit <code>action=request_escalation</code> on the same ticket repeatedly right after a staff denial — it goes back to <code>pending</code> every single time, with no cooldown or cap, letting a user flood the staff queue with the same request indefinitely.',
         ),
     ),
 ),
@@ -1196,7 +1612,7 @@ they're listed here because they're step one on a real target.</p>
 <tr><td><?php echo $i + 1; ?></td><td><strong><?php echo htmlspecialchars($v[0]); ?></strong></td><td><?php echo htmlspecialchars($v[1]); ?></td></tr>
 <?php endforeach; ?>
 </table>
-<p class="small">This app currently exercises rows 1, 2 (JWT issues specifically, via the API Token (JWT) Auth module), 3, 5, 7, 10, and 11 (Injection, Broken Auth/JWT, Access Control, File Upload, CSRF, API-specific, CTF-style chains) — the rest are worth knowing for real targets even though they're not modeled here yet.</p>
+<p class="small">This app currently exercises rows 1 (Injection, including XXE via the Bulk Import Tickets module), 2 (Broken Auth, including JWT issues via the API Token (JWT) Auth module, plus session fixation and 2FA bypass via the Enable 2FA/Verify 2FA modules), 3 (Access Control), 4 (Business Logic, via the ticket escalation-approval workflow), 5 (File Upload), 6 (SSRF, via the Link Preview module), 7 (CSRF), 10 (API-specific), 11 (CTF-style chains), 12 (Client-side, via clickjacking on the 2FA toggle and DOM XSS on the ticket search deep link), and 13 (Advanced, via cache poisoning on the login page) — rows 8 (Info Disclosure) and 9 (Misconfig, beyond the clickjacking header covered under row 12) are worth knowing for real targets even though they're not modeled here yet.</p>
 
 <h4 style="margin-top:22px;">Phase 4 — Exploitation &amp; Validation</h4>
 <ul>

@@ -9,6 +9,19 @@ function require_login() {
         header('Location: ' . app_base() . '/index.php');
         exit;
     }
+    // 2FA gate: a totp-enabled account's session carries 'totp_verified'
+    // from the moment the password check succeeds (see index.php) - it's
+    // only ever missing entirely for accounts that never opted into 2FA,
+    // which is why a missing key is treated as "nothing to verify" rather
+    // than blocking every login. This check lives here, in the shared
+    // require_login() helper - any page that rolls its own ad-hoc
+    // "isset($_SESSION['user_id'])" check instead of calling this
+    // function (api/tickets.php does exactly that) never learns about
+    // this flag at all. See the 2FA Bypass module / README.
+    if (isset($_SESSION['totp_verified']) && $_SESSION['totp_verified'] === false) {
+        header('Location: ' . app_base() . '/user/verify_2fa.php');
+        exit;
+    }
 }
 
 // NOTE: In "simple" and "intermediate" tiers, role checks like this exist on

@@ -36,7 +36,7 @@ include dirname(__FILE__) . '/../includes/header.php';
 <h2>Support Queue</h2>
 <?php if ($msg): ?><div class="notice"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
 <table>
-<tr><th>ID</th><th>From</th><th>Subject</th><th>Message</th><th>Status</th><th>Action</th></tr>
+<tr><th>ID</th><th>From</th><th>Subject</th><th>Message</th><th>Status</th><th>Priority</th><th>Escalation</th><th>Action</th></tr>
 <?php while ($row = mysqli_fetch_assoc($res)): ?>
 <tr>
     <td><?php echo (int)$row['id']; ?></td>
@@ -44,6 +44,21 @@ include dirname(__FILE__) . '/../includes/header.php';
     <td><?php echo render_ticket_text($row['subject'], $difficulty); ?></td>
     <td><?php echo render_ticket_text($row['message'], $difficulty); ?></td>
     <td><?php echo htmlspecialchars($row['status']); ?></td>
+    <td><?php echo htmlspecialchars($row['priority']); ?></td>
+    <td>
+        <?php if ($row['escalation_status'] === 'pending'): ?>
+        <!-- Business Logic module: this Approve/Deny pair posts to
+             support/escalation_approve.php, which is reachable directly
+             by anyone at hard tier - see that file. -->
+        <form method="POST" action="<?php echo app_base(); ?>/support/escalation_approve.php" style="display:inline;margin:0;">
+            <input type="hidden" name="ticket_id" value="<?php echo (int)$row['id']; ?>">
+            <button type="submit" name="action" value="approve" style="padding:3px 8px;font-size:11px;">Approve</button>
+            <button type="submit" name="action" value="deny" style="padding:3px 8px;font-size:11px;">Deny</button>
+        </form>
+        <?php else: ?>
+        <span class="small"><?php echo htmlspecialchars($row['escalation_status']); ?></span>
+        <?php endif; ?>
+    </td>
     <td>
         <form method="POST" style="margin:0;">
             <input type="hidden" name="ticket_id" value="<?php echo (int)$row['id']; ?>">
