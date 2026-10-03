@@ -107,17 +107,20 @@ chown -R apache:apache "$APP_DIR"
 chmod -R 755 "$APP_DIR"
 mkdir -p "$APP_DIR/uploads"
 chmod -R 777 "$APP_DIR/uploads"
+mkdir -p "$APP_DIR/cache"
+chmod -R 777 "$APP_DIR/cache"   # Cache Poisoning module, see includes/simple_cache.php
 
 echo "-- Checking SELinux --"
 if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" != "Disabled" ]; then
     echo "   SELinux is $(getenforce) - setting the context httpd needs to"
-    echo "   both serve this app and write to uploads/."
+    echo "   both serve this app and write to uploads/ and cache/."
     if ! command -v semanage >/dev/null 2>&1; then
         echo "   semanage isn't installed - installing policycoreutils-python-utils"
         "$PKG_MGR" install -y policycoreutils-python-utils > /dev/null 2>&1 || true
     fi
     if command -v semanage >/dev/null 2>&1; then
         semanage fcontext -a -t httpd_sys_rw_content_t "$APP_DIR/uploads(/.*)?" 2>/dev/null || true
+        semanage fcontext -a -t httpd_sys_rw_content_t "$APP_DIR/cache(/.*)?" 2>/dev/null || true
         restorecon -Rv "$APP_DIR" > /dev/null 2>&1 || true
     else
         # Installing the package above failed (e.g. no network, repo
@@ -163,6 +166,7 @@ echo "   Login  admin / admin123"
 echo "          sam   / support123"
 echo "          alice / alice123"
 echo "          bob   / bob123"
+echo "          carol / carol123   (2FA enabled - see README section 3)"
 echo ""
 echo " Re-run this script (sudo bash setup-rhel.sh) any time you pull an"
 echo " update, to refresh the deployed files and reset the database."

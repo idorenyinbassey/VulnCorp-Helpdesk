@@ -13,6 +13,10 @@
 // at) so adding it there would only teach the wrong lesson: that the
 // bug is fixed when it isn't. If you extend this file, keep new behavior
 // off the fields above.
+//
+// The one deliberate exception is assets/search-prefill.js (DOM XSS
+// module) - a DOM-based bug structurally needs a client-side sink, so it
+// gets its own separate, clearly-labeled file instead of living here.
 
 document.addEventListener('DOMContentLoaded', function () {
     initPasswordMatch();

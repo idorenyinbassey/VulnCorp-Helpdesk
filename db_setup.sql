@@ -20,6 +20,8 @@ CREATE TABLE users (
     full_name VARCHAR(100),
     email VARCHAR(100),
     api_key VARCHAR(64) DEFAULT NULL,  -- API Token (JWT) Auth module, see api/auth_token.php
+    totp_secret VARCHAR(32) DEFAULT NULL,  -- 2FA Bypass module, see includes/totp.php
+    totp_enabled TINYINT(1) NOT NULL DEFAULT 0,
     session_token VARCHAR(64) DEFAULT NULL,
     reset_token VARCHAR(64) DEFAULT NULL,     -- forgot-password flow (see user/forgot_password.php)
     reset_expires DATETIME DEFAULT NULL,
@@ -39,6 +41,17 @@ INSERT INTO users (username, password, role, full_name, email, api_key) VALUES
 ('alice',   MD5('alice123'),   'user',    'Alice User',     'alice@vulncorp.lab','ak_live_7d4f1a9b6e2c8035'),
 ('bob',     MD5('bob123'),     'user',    'Bob Builder',    'bob@vulncorp.lab',  'ak_live_2c9b5f8e4a1d7360');
 
+-- 2FA Bypass module: a 5th account, totp_enabled from the start, kept
+-- entirely separate from admin/sam/alice/bob so every existing
+-- challenge that assumes a one-step admin/sam/alice/bob login keeps
+-- working unchanged - this module only ever affects carol. The secret
+-- is a fixed, documented value (same "not meant to resist guessing"
+-- reasoning as api_key above) - none of this module's 4 challenges
+-- require producing a real code, only demonstrating each tier's gate
+-- bypass, so there's nothing gained by hiding it.
+INSERT INTO users (username, password, role, full_name, email, totp_secret, totp_enabled) VALUES
+('carol', MD5('carol123'), 'user', 'Carol Twofactor', 'carol@vulncorp.lab', 'JBSWY3DPEHPK3PXP', 1);
+
 CREATE TABLE tickets (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
@@ -46,6 +59,7 @@ CREATE TABLE tickets (
     message TEXT NOT NULL,
     status VARCHAR(20) DEFAULT 'open',
     priority VARCHAR(20) NOT NULL DEFAULT 'normal',  -- API mass-assignment module, see api/ticket_update.php
+    escalation_status VARCHAR(20) NOT NULL DEFAULT 'none',  -- Business Logic module: none/pending/approved/denied
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

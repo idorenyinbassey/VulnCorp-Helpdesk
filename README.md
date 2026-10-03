@@ -25,10 +25,12 @@ apps are fixed-difficulty.
 It's meant as a **guided on-ramp that comes *before* DVWA and
 PortSwigger**, not a replacement for them — once a student is
 comfortable here, those tools cover far more ground (GraphQL, HTTP
-smuggling, XXE, SSTI, and other categories this single custom app
-structurally can't demonstrate — JWT auth flaws are now modeled here too,
-see section 6) and have years of community calibration behind them that
-this app doesn't have yet. The
+smuggling, SSTI, prototype pollution, and other categories this single
+custom app structurally can't demonstrate — JWT auth flaws, SSRF, XXE,
+2FA bypass, session fixation, cache poisoning, clickjacking, DOM XSS,
+and a full business-logic approval workflow are all now modeled here
+too, see sections 5 and 6) and have years of community calibration
+behind them that this app doesn't have yet. The
 beginner-feedback tools (`/feedback/`) exist specifically to start
 building that calibration from real student data instead of one
 person's best guess at what a beginner needs.
@@ -60,8 +62,8 @@ person's best guess at what a beginner needs.
 > section 2 below — `setup-modern.sh` is a one-command native install
 > for a modern Debian/Ubuntu VM, `setup-rhel.sh` does the same for the
 > RHEL/Fedora family, or use [`docker/README.md`](docker/README.md) if
-> you already have Docker running somewhere. Same app, same 51
-> challenges (44 tiered, 5 recon-phase, 2 CTF flag chains) either way —
+> you already have Docker running somewhere. Same app, same 77
+> challenges (70 tiered, 5 recon-phase, 2 CTF flag chains) either way —
 > only the deployment mechanics differ from what's below, which is
 > Metasploitable2-specific.
 
@@ -126,6 +128,7 @@ or if something above doesn't fit your setup)
    sudo chown -R www-data:www-data /var/www/vulnapp
    sudo chmod -R 755 /var/www/vulnapp
    sudo chmod -R 777 /var/www/vulnapp/uploads   # deliberately world-writable for the upload module
+   sudo mkdir -p /var/www/vulnapp/cache && sudo chmod -R 777 /var/www/vulnapp/cache   # disk cache for the Cache Poisoning module
    ```
 
 4. **Load the database schema**
@@ -140,7 +143,7 @@ or if something above doesn't fit your setup)
    ```bash
    mysql -u root -e "USE vulnapp; SELECT username, role FROM users; SELECT * FROM settings;"
    ```
-   You should see 4 users (admin/sam/alice/bob) and one settings row (`difficulty = simple`).
+   You should see 5 users (admin/sam/alice/bob/carol) and one settings row (`difficulty = simple`).
 
 6. **(Optional) Give it its own vhost** instead of `/vulnapp/` in the URL —
    add to `/etc/apache2/sites-available/vulnapp.conf`:
@@ -286,11 +289,20 @@ reachable from Kali for whichever exercise needs it.
 | sam      | support123  | support |
 | alice    | alice123    | user    |
 | bob      | bob123      | user    |
+| carol    | carol123    | user    |
 
 Each seeded account also has an `api_key` in the `users` table, used by
 the API Token (JWT) Auth module (see section 6) — it's not shown in any
 UI by design; the "The Forgotten Export" CTF chain is about leaking one
 via an existing IDOR, not reading it off this table.
+
+**carol is the only account with `totp_enabled = 1`** — she's the
+designated target for the 2FA Bypass module (section 5) and the
+Clickjacking module's PoC (framing her "Disable 2FA" toggle). She's a
+brand-new account rather than reusing admin/sam/alice/bob specifically
+so every pre-existing challenge that assumes those four accounts
+complete login in a single step keeps working unmodified — 2FA is
+opt-in, per-account, not a global login change.
 
 **Managing accounts:** passwords can be changed at `/user/change_password.php`
 (link on the dashboard), and admins can create new accounts at
@@ -332,6 +344,14 @@ good for live-demoing "watch the same payload stop working."
 | **API Token (JWT) Auth** (`api/auth_token.php`, `includes/jwt.php`, Bearer header) | `alg: none` in the JWT header skips signature verification entirely → forge any claims | Blocks the literal lowercase `none` only → bypass with `None`/`NONE` | Alg confusion fully closed, signature required — but `exp` is never checked → a captured token is valid forever | `exp` checked too — but no revocation on password change → a token issued before a password change keeps working after it |
 | **API Token Request rate limiting** (`api/auth_token.php`) | No rate limiting at all → brute-force the `api_key` freely | *(inherits hard-tier behavior below)* | Lockout exists, but keyed by a case-sensitive username and a spoofable `X-Forwarded-For` → both independently bypass it | *(inherits hard-tier behavior — this module's own challenges are simple/hard only)* |
 | **API Ticket Update — Mass Assignment** (`api/ticket_update.php`, Bearer header) | No field allowlist and no ownership check at all → any caller rewrites any ticket's owner and priority | Ownership checked against the ticket's *current* owner — but a new `user_id` in the same request still reassigns it right after | `user_id` finally stripped — but the admin/support-only `priority` field was forgotten and stays open to any caller | Both fields correctly allowlisted — but the check reads `$_POST` while the write loop reads `$_REQUEST` → the same field via the query string slips through |
+| **Session fixation** (`index.php` login + "remember me") | Main login never regenerates the session ID → fixate a victim's session before they log in, then use that same ID yourself afterward | Same bug, plus `session.cookie_httponly` is now set → fixation still works, cookie *theft* doesn't | Main login regenerates correctly — but the separate "remember me" auto-login branch still doesn't → fixate, then wait for a silent remember-me login | Both paths regenerate correctly — closed |
+| **Clickjacking** (`includes/header.php`, every page) | No security headers sent at all → any page can be framed | Same — no headers | `X-Frame-Options: SAMEORIGIN` added to the shared header include — but `user/verify_2fa.php` is a standalone page that never includes it → that one page can still be framed (PoC target: overlay a fake button on the real "Disable 2FA" toggle) | `verify_2fa.php` brought into the shared header include too — closed |
+| **SSRF — Link Preview** (`user/link_preview.php`) | Fetches any URL server-side with redirects followed, no validation at all → internal IPs, `file://`, cloud metadata all reachable | Blocks a `localhost`/`127.0.0.1` substring blacklist → bypass with `127.1`, octal `0177.0.0.1`, or `[::1]` | Validates the initial host against real private IP ranges — but only once, before the first request; a redirect to an internal address is still followed unchecked | Every redirect hop is re-validated — but the hand-rolled private-range check never special-cased `169.254.169.254` (cloud metadata) |
+| **XXE — Bulk Import Tickets** (`admin/import_tickets.php`, admin-only) | `simplexml_load_string()` with no entity-loading protection → classic XXE, read a local file reflected back into the imported ticket | Switches to `DOMDocument->loadXML($xml, LIBXML_NOENT)` — sounds protective, actually *substitutes* entities rather than blocking them → identical exploit still works | Any `<!DOCTYPE` is rejected outright, entity loading disabled → direct disclosure closed; conceptual only beyond this (see the challenge write-up) — blind/OOB exfiltration via a parameter entity referencing an attacker-hosted external DTD | Same fix as hard; conceptual only — entity-expansion ("billion laughs") denial of service |
+| **DOM XSS — search deep link** (`assets/search-prefill.js`, reads `location.hash`) | Raw `innerHTML = location.hash` substring, no filtering at all, entirely client-side | A client-side blacklist strips `<script` only → bypass with `<img onerror=...>` | A naive client-side allowlist keeps `<a href>` but doesn't check for extra attributes alongside it → `<a href=# onmouseover=...>` survives | Closed — uses `textContent`, never `innerHTML` |
+| **2FA bypass** (`includes/totp.php`, `user/verify_2fa.php`, carol's account only) | The full session is set immediately after the password check, before any code is verified → visiting the dashboard directly skips 2FA entirely | Full session only set after a correct code — but `api/tickets.php` checks only `isset($_SESSION['user_id'])`, which the partial-auth state sets too → that one endpoint stays reachable before 2FA completes | That gap closed — but `verify_2fa.php` has no rate limiting on code guesses at all (6-digit space, no lockout) | Rate-limited correctly — but a "remember this device" cookie, once set, skips 2FA entirely and its value is just `md5(username)` → forgeable without ever completing 2FA |
+| **Cache poisoning** (`includes/simple_cache.php`, login page) | `X-Forwarded-Host` reflected raw into a cached `<link rel="canonical">`, cache never varies by it → poison once, every later plain visitor gets the injected content | Same bug, but a cache-buster query param is now needed to force a fresh entry per test | The header value is now `htmlspecialchars()`-escaped — but the canonical *URL* is still built from it unsafely → poisoning now produces an open-redirect-flavored cached page instead | The Host-ish header is excluded from reflection — but `Accept-Language` (an unrelated "preferred language" banner) is still reflected into the same cached page, unkeyed |
+| **Business logic — escalation workflow** (`user/tickets.php`, `support/escalation_approve.php`) | "Request Escalation" directly sets `priority = urgent` server-side, no approval step or role check anywhere | A `pending` state exists, but the "waiting for approval" gating is enforced only in JS → a direct POST to the same handler still applies the escalation immediately | Server-side pending-state enforced for the request step — but the approval endpoint never checks the caller's role → any logged-in user can approve their own pending request | The approval endpoint is correctly role-checked — but nothing limits how many times a user can re-request escalation after a denial, no cooldown at all |
 
 `user/profile_export.php` is a good standalone target at every
 tier since its missing ownership check doesn't depend on the toggle —
@@ -356,18 +376,20 @@ it's easy to add your own challenges as you extend the app.
 The concept blocks exist specifically for beginners: knowing that
 `' -- ` bypasses a login form isn't the same as understanding *why* —
 that the query is built by string concatenation, what a quote does to
-that string, what a comment operator removes. Each of the 44 tiered
+that string, what a comment operator removes. Each of the 70 tiered
 challenges has one; the recon, CTF-flag, and tools-reference sections
 don't, since those are about methodology/tool usage or multi-step chains
 rather than a single specific vulnerability mechanism.
 
-**Difficulty badges and staged hints.** Each of the 44 tiered
+**Difficulty badges and staged hints.** Each of the 70 tiered
 challenges is also rated **Entry / Standard / Stretch** (a genuine
 audit of relative cognitive load within its tier, not just its
 position in the array) and displayed sorted by that rating — Entry
 challenges first, Stretch last — so a student working through, say,
-the Simple tier meets the four easiest challenges before the ones that
-need more synthesis (UNION SQLi, the CSRF backdoor). Hints are
+the Simple tier meets its easiest challenges (auth bypass, basic IDOR,
+the DOM XSS deep link, the business-logic escalation gap) before the
+ones that need more synthesis (UNION SQLi, the CSRF backdoor, the XXE
+file read). Hints are
 two-stage: a **Nudge** (a conceptual pointer, no payload) reveals
 first, and a separate **Full answer** underneath it holds what used to
 be the single "Reveal clue." This was originally planned as three
@@ -382,10 +404,10 @@ vulnerability to nudge toward.
 
 A short version of what's covered (full detail is on the page itself):
 
-- **Simple** — auth bypass, UNION-based dumping with sqlmap, stored XSS, basic IDOR, raw command injection, unrestricted upload, a hand-forged `alg: none` JWT, unrestricted API mass assignment, and a brute-forceable API token exchange.
-- **Intermediate** — the same bug classes behind naive filters (case-sensitive blacklists, client-controlled Content-Type checks, case-sensitive `alg` filtering) — the skill here is filter evasion, not new bug-finding.
-- **Hard** — main paths are fixed; the challenges point at the secondary flaw a real reviewer would have to hunt for (a forgotten endpoint, a second unescaped parameter, a polyglot file, a JWT with no expiry check, an API field nobody staff-gated, a rate limit with two independent bypasses).
-- **Expert** — mostly closed; challenges lean on source review, brute force against a missing rate limit, a CSRF PoC exercise, a JWT with no revocation on password change, and a `$_POST`-vs-`$_REQUEST` mismatch on the API mass-assignment endpoint (build the PoC against hard mode, then confirm the same PoC fails once the matching fix lands in expert mode — a good exercise in writing an accurate bug report).
+- **Simple** — auth bypass, UNION-based dumping with sqlmap, stored XSS, basic IDOR, raw command injection, unrestricted upload, a hand-forged `alg: none` JWT, unrestricted API mass assignment, a brute-forceable API token exchange, session fixation, a framed 2FA toggle, an unrestricted SSRF link preview, a classic XXE file read, a client-side DOM XSS deep link, a decorative 2FA step, unkeyed cache poisoning, and a self-approved ticket escalation.
+- **Intermediate** — the same bug classes behind naive filters (case-sensitive blacklists, client-controlled Content-Type checks, case-sensitive `alg` filtering, a `localhost` substring SSRF blacklist, a `LIBXML_NOENT` XXE misconception, a `<script`-only DOM XSS filter, a forgotten-endpoint 2FA gap, a cache-buster-gated poisoning check, and a JS-only escalation gate) — the skill here is filter evasion, not new bug-finding.
+- **Hard** — main paths are fixed; the challenges point at the secondary flaw a real reviewer would have to hunt for (a forgotten endpoint, a second unescaped parameter, a polyglot file, a JWT with no expiry check, an API field nobody staff-gated, a rate limit with two independent bypasses, a remember-me path that skips session regeneration, a 2FA page that never got the clickjacking header, a redirect that bypasses SSRF host validation, blind/OOB XXE via a parameter entity, a DOM XSS allowlist that only checks for `href`, unrate-limited 2FA codes, an unsafely-built cached canonical URL, and an escalation-approval endpoint with no role check).
+- **Expert** — mostly closed; challenges lean on source review, brute force against a missing rate limit, a CSRF PoC exercise, a JWT with no revocation on password change, a `$_POST`-vs-`$_REQUEST` mismatch on the API mass-assignment endpoint, an SSRF blocklist that forgot the cloud-metadata address, a closed DOM XSS sink to confirm and explain, a forgeable "remember this device" 2FA cookie, an unkeyed `Accept-Language` reflection into the same cached page, and an escalation workflow with no cooldown on repeated requests (build the PoC against hard mode, then confirm the same PoC fails once the matching fix lands in expert mode — a good exercise in writing an accurate bug report).
 - **CTF flags (not tier-gated)** — two standalone chains that combine several bugs above into one exploit path: an IDOR-leaked API key exchanged for a forged admin session, and a hidden always-vulnerable `alg: none` branch independent of the configured tier.
 
 The **CSRF challenge** is the one place the page hands you a code
@@ -410,6 +432,113 @@ is a JSON write endpoint, authenticated the same way, that deliberately
 writes whatever fields a request supplies instead of enforcing a fixed,
 role-aware allowlist — the API-specific counterpart to the browser-form
 mass assignment in `user/profile.php`.
+
+**Session fixation module.** No new feature — this one lives entirely
+in the existing login flow (`index.php`). Below the hard tier, neither
+the password-check success path nor the "remember me" auto-login path
+ever calls `session_regenerate_id()`, so a session ID set *before*
+login (e.g. handed to a victim via a crafted link) stays valid *after*
+login too — the classic fixation attack. The hard tier fixes the main
+path but not the remember-me branch; expert fixes both.
+
+**Clickjacking module.** `includes/header.php` (included by every
+normal page) sends a tiered `X-Frame-Options` header. The designated
+target is `/user/enable_2fa.php`'s "Disable 2FA" toggle — but the hard
+tier's bug isn't in that page at all: `/user/verify_2fa.php` (the
+second login step, see the 2FA module below) is a deliberately
+lightweight, standalone page that never includes the shared
+header/footer chrome, so it never gets the new header either — the
+same "one endpoint forgot the shared protection" pattern this app
+already uses for `profile_export.php` and the API list-mode endpoint.
+
+**SSRF — Link Preview module.** `/user/link_preview.php` is a
+real, common helpdesk feature: paste a URL while composing a ticket
+and get a fetched title/snippet back (Slack and Jira both do this).
+It fetches server-side via curl with no library beyond what PHP ships.
+The bug progression is the textbook SSRF validation story: no checks
+at all, then a substring blacklist (bypassable with alternate IP
+representations), then a real IP-range check that only runs once
+before the first request (bypassable via a redirect `curl` follows
+without re-validating), then per-hop redirect revalidation that still
+forgets the cloud-metadata range `169.254.169.254` — the exact gap
+this app's own vulnerability reference table already calls out for
+SSRF.
+
+**XXE — Bulk Import Tickets module.** `/admin/import_tickets.php`
+(admin-only) adds bulk ticket import from a pasted XML document —
+again a real pattern many helpdesks support for migrations. At the
+simple tier it's `simplexml_load_string()` with PHP's own real
+pre-8.0 default behavior (external entity loading enabled), so no
+code at all is needed to make it vulnerable, only code is needed to
+fix it. The intermediate tier switches to `DOMDocument` with
+`LIBXML_NOENT` — a common real-world misconception, since that flag
+*substitutes* entity values into the tree rather than blocking them,
+so the exact same file-read payload still works. Hard/expert reject
+any `<!DOCTYPE` outright (the reliable fix — tuning
+`resolveExternals`/`substituteEntities` alone turned out *not* to be
+enough, since `->textContent` still walks into an EntityReference
+subtree and reconstructs the substituted value regardless); beyond
+that, blind/OOB exfiltration via a parameter entity and
+entity-expansion ("billion laughs") denial of service are covered as
+challenge write-up exercises rather than live-exploitable code paths,
+matching this app's existing restraint around payloads too risky to
+run destructively in a shared classroom lab (see the command-injection
+module's "confirm with a harmless command" guidance).
+
+**DOM XSS — search deep link module.** `assets/search-prefill.js`
+reads `location.hash` for a `q=` deep-link parameter and writes a
+"Showing results for: …" banner on the ticket search page — a feature
+that exists purely client-side, with the payload never touching the
+server at all. This is a deliberate, explicitly-flagged one-off
+exception to `assets/app.js`'s documented "touches no exploit-relevant
+field" policy (see section 8): a DOM XSS module structurally requires
+a client-side sink, so it's isolated into its own file rather than
+mixed into the JS that's supposed to stay exploit-free. The tiers
+mirror `naive_allowlist_sanitize()`'s server-side bug shape exactly,
+just in JavaScript: raw `innerHTML`, a `<script`-only blacklist, an
+allowlist that checks for `href` but not *only* `href`, and finally
+`textContent`, which closes it for good.
+
+**2FA bypass module.** `includes/totp.php` is a hand-rolled RFC 6238
+TOTP implementation (`hash_hmac('sha1', ...)`, no library — same
+precedent as `includes/jwt.php`). Only `carol` has `totp_enabled = 1`
+seeded (see the credentials table in section 3); logging in with 2FA
+enabled routes through the new second step, `/user/verify_2fa.php`.
+Below the hard tier, the full session is granted before the code is
+even checked (simple), or a differently-named session flag means a
+second endpoint never learned about the new partial-auth state
+(intermediate — `api/tickets.php` only checks `isset($_SESSION['user_id'])`,
+which the partial-auth state sets too). Hard closes both, but adds no
+rate limiting to the 6-digit code itself; expert rate-limits correctly
+but still has a "remember this device" cookie worth exactly
+`md5(username)` — forgeable without ever touching a code, the same
+weak-token flavor as this app's simple-tier password-reset bug.
+
+**Cache poisoning module.** `includes/simple_cache.php` is a minimal
+disk cache (atomic write-temp-then-`rename()`) applied only to the
+login page's GET-render branch — the POST auth logic every other
+login challenge depends on is untouched. The login page reflects
+`X-Forwarded-Host` into a `<link rel="canonical">` URL; since the
+cache never varies by that header, poisoning it once serves the
+injected value to every later plain visitor of the same URL. Tiers
+move through: raw reflection, a cache-buster needed to force a fresh
+entry to test against, an escaped-but-still-unsafely-built canonical
+URL (open-redirect flavor), and finally a second, unrelated reflected
+header (`Accept-Language`, feeding an unkeyed "preferred language"
+banner) that nobody thought to check once attention moved on to the
+first one.
+
+**Business logic — escalation workflow module.** A regular user can
+ask for their own ticket to be bumped to Urgent priority
+(`user/tickets.php`); only support/admin staff should be able to
+*approve* that request (`support/escalation_approve.php`). This is
+deliberately distinct from the existing API mass-assignment module
+(a JSON endpoint accepting an unexpected field) — it's a multi-step
+*workflow* with its own approval gate, and every tier's bug is in
+whether that gate is actually enforced: no gate at all, a
+client-side-only gate, a gate with no role check on the approval
+side, and finally a correctly-gated workflow with no limit on how
+many times it can be re-requested after a denial.
 
 ## 7. Deployment path handling
 
@@ -440,6 +569,17 @@ validation off those fields: browser-side checks are trivially
 bypassed with devtools or Burp Repeater anyway (the tools this app's
 own challenges tell students to use), so adding them there would
 only teach the wrong lesson — that a bug is fixed when it isn't.
+
+**One deliberate, explicitly-flagged exception:** `assets/search-prefill.js`
+is a *separate* file, not part of `app.js`, that reads `location.hash`
+and writes it into the ticket-search page — the DOM XSS module (see
+section 5). A client-side vulnerability class structurally needs a
+client-side sink, so this one file carries the exception on purpose
+rather than quietly bending the "no exploit-relevant JS" rule inside
+`app.js` itself. It also reads the server-rendered
+`<body data-difficulty="...">` attribute to branch its own tiered
+behavior — the only place in this app client-side code needs to know
+the server's difficulty tier.
 
 ## 9. Toolkit — downloadable checklists & kits
 
@@ -562,6 +702,7 @@ Or by hand (paths shown for Metasploitable2 — swap in
 ```bash
 mysql -u root < /var/www/vulnapp/db_setup.sql   # re-run anytime to reset users/tickets
 rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .gitkeep if you add one)
+rm -f /var/www/vulnapp/cache/*                   # clear the login-page disk cache (keep .gitkeep if you add one)
 ```
 
 ## 13. Notes
@@ -574,9 +715,28 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
 - `includes/db.php` defaults to MySQL `root` with no password to
   match Metasploitable2's out-of-the-box MySQL config. Change this
   if you're deploying elsewhere.
-- This app has no self-registration and no password-reset flow on
-  purpose, to keep the four seeded accounts as the whole attack
-  surface for the role model.
+- This app has no self-registration on purpose, to keep the five
+  seeded accounts as the whole attack surface for the role model
+  (it does have a password-reset flow — see section 5's "Forgot
+  password" row — just no way to create a new account outside
+  `admin/create_user.php`).
+- **2FA is opt-in and seeded on exactly one account (`carol`), not
+  `admin`/`sam`/`alice`/`bob`.** Roughly 40+ of this app's other
+  challenges assume those four accounts complete login in a single
+  step (the SQLi bypass, brute force, the CSRF-backdoor chain, and
+  more) — adding a second factor to any of them would have silently
+  broken every one of those. A fifth, brand-new account keeps 2FA
+  fully additive instead of a breaking change.
+- **The XXE module's simple-tier bug is PHP-version-sensitive by
+  design, not by accident.** `simplexml_load_string()` loads external
+  entities by default on PHP before 8.0 — the exact target this app
+  is built for (see the PHP 5.2 notes throughout) — but PHP 8+
+  disables that by default regardless of what the code says. If
+  you're testing this module on a modern PHP install instead of the
+  intended Metasploitable2/legacy target, the simple-tier *external
+  file read* won't demonstrate itself the same way; the intermediate
+  tier's `LIBXML_NOENT` entity-substitution bug doesn't depend on that
+  default and reproduces identically on any PHP version.
 - **The welcome-bonus race condition needed a real fix, not just a
   design.** As first written, PHP's default session file locking would
   have serialized concurrent requests from the same session — masking
@@ -614,7 +774,7 @@ rm -f /var/www/vulnapp/uploads/*                 # clear uploaded files (keep .g
 - New vulnerable modules should get a `'difficulty'` rating
   (`Entry`/`Standard`/`Stretch`) and a two-part `'hints'` array
   (`nudge`/`answer`) in `challenges/index.php`, matching the existing
-  44 tiered entries, so they sort correctly and fit the site's format.
+  70 tiered entries, so they sort correctly and fit the site's format.
   If you want vote data on it too, give it the same `challenge_slug()`-
   based `id` and the `render_feedback_widget()` call already used by
   every other card — nothing else to wire up. A standalone, non-tiered

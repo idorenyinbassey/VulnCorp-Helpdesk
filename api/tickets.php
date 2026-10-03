@@ -36,9 +36,27 @@ function http_response_code_compat($code) {
 // reading $_SESSION directly. The JWT path's own bugs (alg confusion,
 // missing expiry, no revocation) live entirely in jwt_verify() -
 // nothing here changes because of them.
+//
+// 2FA Bypass module (intermediate tier): index.php sets $_SESSION['user_id']
+// for a totp-enabled account as soon as the password check succeeds,
+// before the 2FA code is verified - require_login() (includes/auth.php)
+// knows to also check $_SESSION['totp_verified'] before letting such a
+// session through, but this file was built to check $_SESSION directly
+// and never calls require_login() at all, so a session mid-2FA-verification
+// authenticates here exactly as if it were fully logged in.
 // ---------------------------------------------------------------
 $auth_user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
 $auth_role = isset($_SESSION['role']) ? $_SESSION['role'] : null;
+
+// hard/expert: this endpoint now applies the same partial-auth check
+// require_login() does, closing the gap above for the session-cookie
+// path specifically - a Bearer token (below) is a wholly separate auth
+// mechanism with no 2FA state of its own, so it's untouched by this.
+if (($difficulty === 'hard' || $difficulty === 'expert')
+    && isset($_SESSION['totp_verified']) && $_SESSION['totp_verified'] === false) {
+    $auth_user_id = null;
+    $auth_role = null;
+}
 
 $auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
 if ($auth_header !== '' && stripos($auth_header, 'Bearer ') === 0) {
