@@ -4,6 +4,20 @@
 
 require_once dirname(__FILE__) . '/compat.php';
 
+// PHP 5.2 (this app's real target, e.g. Metasploitable2) always had mysqli
+// return false from a failed query, which every file here is written to
+// check for (if ($res === false) { ... }). PHP 8.1 changed mysqli's
+// default to instead THROW an uncaught mysqli_sql_exception on a query
+// error - turning any malformed/broken SQL into a raw 500 instead of the
+// app's own intended error handling (e.g. the simple-tier "verbose SQL
+// errors" info-disclosure bug, or sqlmap's error-based/UNION-based
+// detection, both of which depend on a clean response instead of a
+// crash). Explicitly opting back into the old return-false behavior
+// keeps this app working identically on PHP 5.2 through 8.4+.
+if (function_exists('mysqli_report')) {
+    mysqli_report(MYSQLI_REPORT_OFF);
+}
+
 $DB_HOST = getenv('DB_HOST') !== false ? getenv('DB_HOST') : 'localhost';
 $DB_USER = getenv('DB_USER') !== false ? getenv('DB_USER') : 'root';        // change to a dedicated low-priv user if you prefer; see README
 $DB_PASS = getenv('DB_PASS') !== false ? getenv('DB_PASS') : '';             // set this to match your MySQL root/user password on Metasploitable2
