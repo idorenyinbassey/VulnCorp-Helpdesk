@@ -121,8 +121,8 @@ needed for Lab 29 specifically.
 
 **Steps:**
 
-1. With difficulty still on **simple**, capture the login POST request in Burp and save it as a `.req` file.
-2. Run `sqlmap -r login.req -p username --dump` and let it identify and exploit the injection automatically.
+1. With difficulty still on **simple**, submit the login form once with a **real seeded username** (e.g. `admin`) and a wrong password — not a made-up username. Capture that exact POST request in Burp and save it as a `.req` file.
+2. Run `sqlmap -r login.req -p username --suffix="-- -" --drop-set-cookie --dump` and let it identify and exploit the injection automatically. The two extra flags matter here: `--suffix` makes every payload sqlmap tries end in a SQL comment (the same technique as Lab 5's bypass), and `--drop-set-cookie` stops sqlmap from reusing a session a successful payload just logged in — without both, automated detection against this specific login form can fail or stall partway through extraction even though the injection is real.
 3. Separately, manually determine the column count via `UNION SELECT` trial and error, and craft a manual payload that reflects data back into the page.
 4. Compare what sqlmap found against your manual extraction.
 
